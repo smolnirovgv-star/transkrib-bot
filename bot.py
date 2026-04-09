@@ -129,43 +129,36 @@ async def handle_lang_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def process_video(chat_id, url, context):
-    msg = await context.bot.send_message(
+    cut_minutes = context.user_data.get('cut', 'cut_no').replace('cut_', '').replace('no', '0')
+    fmt = context.user_data.get('fmt', 'fmt_text')
+    language = context.user_data.get('lang', 'lang_auto').replace('lang_', '')
+
+    await context.bot.send_message(
         chat_id=chat_id,
         text='⏳ Обрабатываю видео...\nЭто займёт 1-3 минуты. Пожалуйста подожди!'
     )
     try:
-        async with httpx.AsyncClient(timeout=300) as client:
-            resp = await client.post(
-                f"{API_URL}/api/tasks/url",
-                json={"url": url, "user_id": str(chat_id)}
+        async with httpx.AsyncClient(timeout=300.0) as client:
+            response = await client.post(
+                f"{API_URL}/api/transcribe",
+                json={
+                    "url": url,
+                    "cut_minutes": cut_minutes,
+                    "format": fmt,
+                    "language": language,
+                }
             )
-            data = resp.json()
-            task_id = data.get("task_id")
-            if not task_id:
-                await msg.edit_text("❌ Ошибка создания задачи. Попробуй позже.")
-                return
-            for i in range(60):
-                await asyncio.sleep(5)
-                sd = (await client.get(f"{API_URL}/api/tasks/{task_id}")).json()
-                if sd.get("status") == "completed":
-                    result = sd.get("result", {})
-                    transcript = (result.get("transcript") or "")[:2000]
-                    summary = result.get("summary") or result.get("analysis") or ""
-                    await msg.edit_text(
-                        f"✅ Готово!\n\n📋 *Резюме:*\n{summary[:500]}\n\n"
-                        f"📝 *Транскрипция:*\n{transcript}...\n\n"
-                        f"🎬 Обработано Transkrib SmartCut AI",
-                        parse_mode="Markdown"
-                    )
-                    return
-                elif sd.get("status") == "failed":
-                    await msg.edit_text("❌ Ошибка обработки. Попробуй другую ссылку.")
-                    return
-                if i % 6 == 0 and i > 0:
-                    await msg.edit_text(f"⏳ Обрабатываю... прошло {(i*5)//60} мин.")
-            await msg.edit_text("⏱ Превышено время ожидания. Попробуй позже.")
+            data = response.json()
+            if response.status_code == 200:
+                text = data.get("transcription", data.get("text", "Готово!"))
+                await context.bot.send_message(chat_id=chat_id, text=f"✅ Готово!\n\n{text[:3000]}")
+            else:
+                error = data.get("detail", data.get("error", response.text))
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка API: {error}")
+    except httpx.TimeoutException:
+        await context.bot.send_message(chat_id=chat_id, text="⏱ Сервер обрабатывает видео слишком долго. Попробуй короткое видео до 5 минут.")
     except Exception as e:
-        await msg.edit_text(f"❌ Ошибка: {str(e)[:200]}")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)}")
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
