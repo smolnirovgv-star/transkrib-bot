@@ -34,7 +34,10 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     msg = LANG_MESSAGES.get(query.data, "Send a video link!")
-    await query.edit_message_text(text=msg)
+    try:
+        await query.edit_message_text(text=msg)
+    except Exception:
+        await context.bot.send_message(chat_id=query.message.chat_id, text=msg)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[
