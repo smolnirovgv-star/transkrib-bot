@@ -138,27 +138,40 @@ async def process_video(chat_id, url, context):
         text='⏳ Обрабатываю видео...\nЭто займёт 1-3 минуты. Пожалуйста подожди!'
     )
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.post(
-                f"{API_URL}/api/transcribe",
-                json={
-                    "url": url,
-                    "cut_minutes": cut_minutes,
-                    "format": fmt,
-                    "language": language,
-                }
-            )
-            data = response.json()
-            if response.status_code == 200:
-                text = data.get("transcription", data.get("text", "Готово!"))
-                await context.bot.send_message(chat_id=chat_id, text=f"✅ Готово!\n\n{text[:3000]}")
-            else:
-                error = data.get("detail", data.get("error", response.text))
-                await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка API: {error}")
-    except httpx.TimeoutException:
-        await context.bot.send_message(chat_id=chat_id, text="⏱ Сервер обрабатывает видео слишком долго. Попробуй короткое видео до 5 минут.")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Шаг 1: создать задачу
+            resp = await client.post(f"{API_URL}/api/tasks/create", json={
+                "url": url,
+                "cut_minutes": cut_minutes,
+                "format": fmt,
+                "language": language,
+            })
+            if resp.status_code != 200:
+                await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка создания задачи: {resp.text[:200]}")
+                return
+            task_id = resp.json().get("task_id")
+
+            # Шаг 2: polling каждые 10 сек
+            for attempt in range(30):
+                await asyncio.sleep(10)
+                status_resp = await client.get(f"{API_URL}/api/tasks/{task_id}/status")
+                data = status_resp.json()
+                status = data.get("status")
+
+                if status == "done":
+                    text = data.get("transcription", data.get("text", "Готово!"))
+                    await context.bot.send_message(chat_id=chat_id, text=f"✅ Готово!\n\n{text[:3500]}")
+                    return
+                elif status == "error":
+                    error = data.get("error", "Неизвестная ошибка")
+                    await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {error}")
+                    return
+                # status == "processing" — продолжаем ждать
+
+            await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (5 мин). Попробуй более короткое видео.")
+
     except Exception as e:
-        await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)}")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)[:200]}")
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
