@@ -1,8 +1,8 @@
 services:
   - type: worker
     name: transkrib-bot
-    runtime: python
-    pythonVersion: 3.11.9
+    env: python
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
