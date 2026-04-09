@@ -1,0 +1,12 @@
+services:
+  - type: worker
+    name: transkrib-bot
+    runtime: python
+    pythonVersion: 3.11.9
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TRANSKRIB_API_URL
+        value: https://transkrib-api.onrender.com
