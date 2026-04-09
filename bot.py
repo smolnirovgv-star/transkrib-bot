@@ -134,12 +134,24 @@ async def process_video(chat_id, url, context):
     fmt = context.user_data.get('fmt', 'fmt_text')
     language = context.user_data.get('lang', 'lang_auto').replace('lang_', '')
 
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text='⏳ Обрабатываю видео...\nЭто займёт 1-3 минуты. Пожалуйста подожди!'
-    )
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            # Шаг 0: разбудить Render (может занять 30 сек)
+            await context.bot.send_message(chat_id=chat_id, text='🔄 Запускаю сервер обработки...')
+            for attempt in range(5):
+                try:
+                    ping = await client.get(f"{API_URL}/api/health", timeout=15.0)
+                    if ping.status_code < 500:
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(8)
+
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text='⏳ Обрабатываю видео...\nЭто займёт 1-3 минуты. Пожалуйста подожди!'
+            )
+
             # Шаг 1: создать задачу
             resp = await client.post(f"{API_URL}/api/tasks/create", json={
                 "url": url,
