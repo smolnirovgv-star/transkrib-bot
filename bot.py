@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 import httpx
 from dotenv import load_dotenv
@@ -154,8 +155,17 @@ async def process_video(chat_id, url, context):
             # Шаг 2: polling каждые 10 сек
             for attempt in range(30):
                 await asyncio.sleep(10)
-                status_resp = await client.get(f"{API_URL}/api/tasks/{task_id}/status")
-                data = status_resp.json()
+                try:
+                    status_resp = await client.get(
+                        f"{API_URL}/api/tasks/{task_id}/status",
+                        timeout=30.0
+                    )
+                    if not status_resp.text.strip():
+                        continue  # пустой ответ — Render просыпается, ждём
+                    data = status_resp.json()
+                except (httpx.TimeoutException, json.JSONDecodeError):
+                    continue  # временная ошибка — продолжаем polling
+
                 status = data.get("status")
 
                 if status == "done":
