@@ -4,10 +4,37 @@ import httpx
 from dotenv import load_dotenv
 load_dotenv()
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 API_URL = os.environ.get("TRANSKRIB_API_URL", "https://transkrib-api.onrender.com")
+
+LANG_MESSAGES = {
+    "lang_ru": "🇷🇺 Язык установлен: Русский
+
+Отправь ссылку на видео YouTube, VK или Rutube!",
+    "lang_en": "🇬🇧 Language set: English
+
+Send a YouTube, VK or Rutube link!",
+    "lang_hi": "🇮🇳 भाषा सेट: हिन्दी
+
+YouTube, VK या Rutube लिंक भेजें!",
+    "lang_zh": "🇨🇳 语言已设置：中文
+
+发送YouTube、VK或Rutube链接！",
+    "lang_ko": "🇰🇷 언어 설정: 한국어
+
+YouTube, VK 또는 Rutube 링크를 보내주세요!",
+    "lang_pt": "🇧🇷 Idioma: Português
+
+Envie um link do YouTube, VK ou Rutube!",
+}
+
+async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    msg = LANG_MESSAGES.get(query.data, "Send a video link!")
+    await query.edit_message_text(text=msg)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[
@@ -105,6 +132,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url))
+    app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_"))
     print("Bot started!")
     app.run_polling()
 
