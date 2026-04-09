@@ -56,7 +56,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def handle_url(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     if not url.startswith('http'):
         await update.message.reply_text(
@@ -191,7 +191,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url)],
+        entry_points=[MessageHandler(filters.Regex(r"https?://"), handle_url_start)],
         states={
             WAITING_CUT: [CallbackQueryHandler(handle_cut, pattern="^cut_")],
             WAITING_FORMAT: [CallbackQueryHandler(handle_format, pattern="^fmt_")],
@@ -200,10 +200,10 @@ def main():
         fallbacks=[CommandHandler("start", start)],
     )
 
+    app.add_handler(conv_handler)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
-    app.add_handler(conv_handler)
     print("Bot started!")
     app.run_polling()
 
