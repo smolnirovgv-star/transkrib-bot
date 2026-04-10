@@ -5,6 +5,7 @@ import httpx
 from dotenv import load_dotenv
 load_dotenv()
 from billing import can_process, increment_usage, get_status_text
+from claude_assistant import ask_claude
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
@@ -277,6 +278,18 @@ async def cmd_cancel(update, context):
     return ConversationHandler.END
 
 
+async def handle_chat(update, context):
+    user_text = update.message.text
+
+    await context.bot.send_chat_action(
+        chat_id=update.effective_chat.id,
+        action="typing"
+    )
+
+    answer = await ask_claude(user_text, project="transkrib_bot")
+    await update.message.reply_text(answer)
+
+
 async def post_init(app):
     await app.bot.set_my_commands([
         BotCommand("start",  "🚀 Главная — выбор языка"),
@@ -308,6 +321,10 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & ~filters.Regex(r'https?://'),
+        handle_chat
+    ))
     print("Bot started!")
     app.run_polling()
 
