@@ -5,8 +5,8 @@ import httpx
 from dotenv import load_dotenv
 load_dotenv()
 from billing import can_process, increment_usage, get_status_text
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 API_URL = os.environ.get("TRANSKRIB_API_URL", "https://transkrib-api.onrender.com")
@@ -249,21 +249,45 @@ async def handle_show_plan(update, context):
     await context.bot.send_message(chat_id=tid, text=text, parse_mode="Markdown", reply_markup=kb)
 
 
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📖 *Как пользоваться Transkrib Bot:*\n\n"
-        "1. Скопируй ссылку на видео\n"
-        "2. Вставь её в чат\n"
-        "3. Выбери настройки\n"
-        "4. Получи транскрипцию и нарезку!\n\n"
-        "🔗 Поддерживаются: YouTube, VK, Rutube\n\n"
-        "💻 Скачать приложение: https://transkrib.su",
-        parse_mode="Markdown"
+async def cmd_help(update, context):
+    text = (
+        "🤖 *Transkrib SmartCut AI* — что умеет бот:\n\n"
+        "🔗 *Отправь ссылку* на видео:\n"
+        "YouTube, VK или Rutube\n\n"
+        "⚙️ *Настройки обработки:*\n"
+        "• ⏱ Длительность — 1, 3, 5 мин или без сокращения\n"
+        "• 📄 Формат — только текст, текст+нарезка, SRT субтитры\n"
+        "• 🌍 Язык — Авто, Русский, English\n\n"
+        "💳 *Тарифы:*\n"
+        "• 🆓 Free — 3 видео бесплатно\n"
+        "• 🚀 Starter — $9/мес (30 видео)\n"
+        "• 💼 Pro — $29/мес (безлимит)\n"
+        "• 👑 Annual — $99/год (безлимит)\n\n"
+        "📌 *Команды:*\n"
+        "/start — главная страница\n"
+        "/plan — мой тариф\n"
+        "/help — эта справка\n"
+        "/cancel — отменить обработку"
     )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def cmd_cancel(update, context):
+    await update.message.reply_text("❌ Обработка отменена. Отправь новую ссылку.")
+    return ConversationHandler.END
+
+
+async def post_init(app):
+    await app.bot.set_my_commands([
+        BotCommand("start",  "🚀 Главная — выбор языка"),
+        BotCommand("plan",   "💳 Мой тариф и подписка"),
+        BotCommand("help",   "❓ Помощь и инструкция"),
+        BotCommand("cancel", "❌ Отменить обработку"),
+    ])
 
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
     conv_handler = ConversationHandler(
         per_message=True,
@@ -273,13 +297,14 @@ def main():
             WAITING_FORMAT: [CallbackQueryHandler(handle_format, pattern="^fmt_")],
             WAITING_LANG: [CallbackQueryHandler(handle_lang_choice, pattern="^lang_")],
         },
-        fallbacks=[CommandHandler("start", start)],
+        fallbacks=[CommandHandler("cancel", cmd_cancel)],
     )
 
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plan", cmd_plan))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
