@@ -12,6 +12,9 @@ from telegram.ext import Application, ApplicationBuilder, CommandHandler, Messag
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 API_URL = os.environ.get("TRANSKRIB_API_URL", "https://transkrib-api.onrender.com")
 
+ADMIN_ID = 5052641158
+FREE_CHAT_LIMIT = 10  # messages per day for free users
+
 WAITING_CUT = 1
 WAITING_FORMAT = 2
 WAITING_LANG = 3
@@ -280,6 +283,8 @@ async def cmd_cancel(update, context):
 
 async def cmd_stats(update, context):
     """Admin stats: usage, costs, users"""
+    if update.effective_user.id != ADMIN_ID:
+        return
     from claude_assistant import supabase
     try:
         usage = supabase.table("bot_api_usage").select("*").execute()
@@ -317,13 +322,34 @@ async def cmd_stats(update, context):
 
 async def handle_chat(update, context):
     user_text = update.message.text
+    uid = update.effective_user.id
+
+    # Rate limit for free users
+    if uid != ADMIN_ID:
+        try:
+            from claude_assistant import supabase
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            usage = supabase.table("bot_api_usage") \
+                .select("id") \
+                .eq("telegram_id", uid) \
+                .gte("created_at", today + "T00:00:00Z") \
+                .execute()
+            if usage.data and len(usage.data) >= FREE_CHAT_LIMIT:
+                await update.message.reply_text(
+                    f"\u26a0\ufe0f Лимит {FREE_CHAT_LIMIT} сообщений в день исчерпан.\n"
+                    f"Обновите тариф: /plan"
+                )
+                return
+        except Exception as e:
+            print(f"Rate limit check error: {e}")
 
     await context.bot.send_chat_action(
         chat_id=update.effective_chat.id,
         action="typing"
     )
 
-    answer = await ask_claude(user_text, project="transkrib_bot", telegram_id=update.effective_user.id)
+    answer = await ask_claude(user_text, project="transkrib_bot", telegram_id=uid)
     await update.message.reply_text(answer)
 
 
