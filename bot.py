@@ -266,6 +266,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     conv_handler = ConversationHandler(
+        per_message=True,
         entry_points=[MessageHandler(filters.Regex(r"https?://"), handle_url_start)],
         states={
             WAITING_CUT: [CallbackQueryHandler(handle_cut, pattern="^cut_")],
@@ -278,6 +279,9 @@ def main():
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("plan", cmd_plan))
+    app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
+    app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
     print("Bot started!")
     app.run_polling()
