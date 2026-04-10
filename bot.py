@@ -19,7 +19,7 @@ WAITING_CUT = 1
 WAITING_FORMAT = 2
 WAITING_LANG = 3
 
-CUT_LABELS = {'cut_1': '1 мин', 'cut_3': '3 мин', 'cut_5': '5 мин', 'cut_no': 'Без сокращения'}
+CUT_LABELS = {'cut_1': '1 мин', 'cut_3': '3 мин', 'cut_5': '5 мин', 'cut_10': '10 мин', 'cut_15': '15 мин', 'cut_no': 'Без сокращения'}
 FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры'}
 LANG_LABELS = {'lang_auto': '🔄 Авто', 'lang_ru': '🇷🇺 Русский', 'lang_en': '🇬🇧 English'}
 
@@ -76,6 +76,9 @@ async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton('1 мин', callback_data='cut_1'),
         InlineKeyboardButton('3 мин', callback_data='cut_3'),
         InlineKeyboardButton('5 мин', callback_data='cut_5'),
+    ],[
+        InlineKeyboardButton('10 мин', callback_data='cut_10'),
+        InlineKeyboardButton('15 мин', callback_data='cut_15'),
         InlineKeyboardButton('Без сокращения', callback_data='cut_no'),
     ]]
     await update.message.reply_text(
@@ -172,7 +175,7 @@ async def process_video(chat_id, url, context):
             task_id = resp.json().get("task_id")
 
             # Шаг 2: polling каждые 10 сек
-            for attempt in range(30):
+            for attempt in range(60):
                 await asyncio.sleep(10)
                 try:
                     status_resp = await client.get(
@@ -197,7 +200,7 @@ async def process_video(chat_id, url, context):
                     return
                 # status == "processing" — продолжаем ждать
 
-            await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (5 мин). Попробуй более короткое видео.")
+            await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (10 мин). Попробуй более короткое видео.")
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)[:200]}")
