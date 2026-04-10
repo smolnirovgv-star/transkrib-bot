@@ -278,6 +278,43 @@ async def cmd_cancel(update, context):
     return ConversationHandler.END
 
 
+async def cmd_stats(update, context):
+    """Admin stats: usage, costs, users"""
+    from claude_assistant import supabase
+    try:
+        usage = supabase.table("bot_api_usage").select("*").execute()
+        rows = usage.data or []
+        total_cost = sum(float(r["cost_usd"]) for r in rows)
+        total_input = sum(r["input_tokens"] for r in rows)
+        total_output = sum(r["output_tokens"] for r in rows)
+        unique_users = len(set(r["telegram_id"] for r in rows))
+        msg_count = len(rows)
+
+        # Today stats
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_rows = [r for r in rows if r["created_at"][:10] == today]
+        today_cost = sum(float(r["cost_usd"]) for r in today_rows)
+        today_msgs = len(today_rows)
+
+        text = (
+            f"\U0001F4CA *Статистика API*\n\n"
+            f"*Сегодня:*\n"
+            f"  Запросов: {today_msgs}\n"
+            f"  Расход: ${today_cost:.4f}\n\n"
+            f"*Всего:*\n"
+            f"  Запросов: {msg_count}\n"
+            f"  Input: {total_input:,} tok\n"
+            f"  Output: {total_output:,} tok\n"
+            f"  Расход: ${total_cost:.4f}\n"
+            f"  Пользователей: {unique_users}\n\n"
+            f"*Баланс Anthropic:* проверь на platform.claude.com"
+        )
+        await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+
 async def handle_chat(update, context):
     user_text = update.message.text
 
@@ -318,6 +355,7 @@ def main():
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plan", cmd_plan))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
