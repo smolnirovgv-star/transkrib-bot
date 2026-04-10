@@ -370,7 +370,7 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
     conv_handler = ConversationHandler(
-        per_message=True,
+        per_message=False,
         entry_points=[MessageHandler(filters.Regex(r"https?://"), handle_url_start)],
         states={
             WAITING_CUT: [CallbackQueryHandler(handle_cut, pattern="^cut_")],
