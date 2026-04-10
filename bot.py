@@ -324,23 +324,27 @@ async def handle_chat(update, context):
     user_text = update.message.text
     uid = update.effective_user.id
 
-    # Rate limit for free users
+    # Rate limit: free users get FREE_CHAT_LIMIT/day, paid users unlimited
     if uid != ADMIN_ID:
         try:
             from claude_assistant import supabase
             from datetime import datetime, timezone
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            usage = supabase.table("bot_api_usage") \
-                .select("id") \
-                .eq("telegram_id", uid) \
-                .gte("created_at", today + "T00:00:00Z") \
-                .execute()
-            if usage.data and len(usage.data) >= FREE_CHAT_LIMIT:
-                await update.message.reply_text(
-                    f"\u26a0\ufe0f Лимит {FREE_CHAT_LIMIT} сообщений в день исчерпан.\n"
-                    f"Обновите тариф: /plan"
-                )
-                return
+            # Check user plan
+            user_row = supabase.table("bot_users").select("plan").eq("telegram_id", uid).execute()
+            user_plan = user_row.data[0]["plan"] if user_row.data else "free"
+            if user_plan == "free":
+                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                usage = supabase.table("bot_api_usage") \
+                    .select("id") \
+                    .eq("telegram_id", uid) \
+                    .gte("created_at", today + "T00:00:00Z") \
+                    .execute()
+                if usage.data and len(usage.data) >= FREE_CHAT_LIMIT:
+                    await update.message.reply_text(
+                        f"\u26a0\ufe0f Лимит {FREE_CHAT_LIMIT} сообщений/день (Free).\n"
+                        f"Обновите тариф для безлимита: /plan"
+                    )
+                    return
         except Exception as e:
             print(f"Rate limit check error: {e}")
 
