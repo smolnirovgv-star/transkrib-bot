@@ -63,4 +63,5 @@ async def ask_claude(
         )
         return response.content[0].text
     except Exception as e:
+        print(f"Claude API error: {type(e).__name__}: {e}")
         return "🤖 Помощник временно недоступен. Попробуй /help"
