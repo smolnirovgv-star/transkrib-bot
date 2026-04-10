@@ -4,6 +4,7 @@ import asyncio
 import httpx
 from dotenv import load_dotenv
 load_dotenv()
+from billing import can_process, increment_usage, get_status_text
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
@@ -47,6 +48,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("🇨🇳 中文", callback_data="lang_zh"),
         InlineKeyboardButton("🇰🇷 한국어", callback_data="lang_ko"),
         InlineKeyboardButton("🇧🇷 Português", callback_data="lang_pt"),
+    ],[
+        InlineKeyboardButton("💳 Мой тариф", callback_data="show_plan"),
     ]]
     await update.message.reply_text(
         "👋 Привет! Я Transkrib SmartCut AI Bot.\n\n"
@@ -194,6 +197,56 @@ async def process_video(chat_id, url, context):
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)[:200]}")
+
+
+async def cmd_plan(update, context):
+    tid = update.effective_user.id
+    nl = chr(10)
+    text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
+    text += nl + nl + "📦 *Тарифы:*" + nl
+    text += "🚀 Starter — $9/мес (30 видео)" + nl
+    text += "💼 Pro — $29/мес (безлимит)" + nl
+    text += "👑 Annual — $99/год (безлимит)"
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🚀 $9/мес", callback_data="buy_starter"),
+        InlineKeyboardButton("💼 $29/мес", callback_data="buy_pro"),
+        InlineKeyboardButton("👑 $99/год", callback_data="buy_annual"),
+    ]])
+    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
+
+
+async def handle_buy(update, context):
+    query = update.callback_query
+    await query.answer()
+    plan = query.data.replace("buy_", "")
+    links = {
+        "starter": "https://transkrib.lemonsqueezy.com/buy/starter",
+        "pro":     "https://transkrib.lemonsqueezy.com/buy/pro",
+        "annual":  "https://transkrib.lemonsqueezy.com/buy/annual",
+    }
+    prices = {"starter": "$9/мес", "pro": "$29/мес", "annual": "$99/год"}
+    nl = chr(10)
+    await query.edit_message_text(
+        f"💳 *{plan.capitalize()}* — {prices.get(plan)}" + nl + nl
+        + f"[Перейти к оплате]({links.get(plan)})" + nl + nl
+        + "После оплаты напиши /plan для проверки.",
+        parse_mode="Markdown"
+    )
+
+
+async def handle_show_plan(update, context):
+    query = update.callback_query
+    await query.answer()
+    tid = query.from_user.id
+    nl = chr(10)
+    text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🚀 $9/мес", callback_data="buy_starter"),
+        InlineKeyboardButton("💼 $29/мес", callback_data="buy_pro"),
+        InlineKeyboardButton("👑 $99/год", callback_data="buy_annual"),
+    ]])
+    await query.edit_message_reply_markup(reply_markup=None)
+    await context.bot.send_message(chat_id=tid, text=text, parse_mode="Markdown", reply_markup=kb)
 
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
