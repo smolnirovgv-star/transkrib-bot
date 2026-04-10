@@ -286,7 +286,7 @@ async def handle_chat(update, context):
         action="typing"
     )
 
-    answer = await ask_claude(user_text, project="transkrib_bot")
+    answer = await ask_claude(user_text, project="transkrib_bot", telegram_id=update.effective_user.id)
     await update.message.reply_text(answer)
 
 
