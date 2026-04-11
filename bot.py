@@ -161,6 +161,19 @@ async def _update_progress(context, chat_id, msg_id, stage_key):
         pass  # ignore "message not modified" errors
 
 
+async def handle_retry(update, context):
+    """Handle retry button — reset conversation and prompt for new URL."""
+    query = update.callback_query
+    await query.answer()
+    # Clear any saved URL
+    context.user_data.clear()
+    await query.edit_message_reply_markup(reply_markup=None)
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="🔄 Чат перезапущен!\n\nОтправь ссылку на YouTube видео заново."
+    )
+
+
 async def process_video(chat_id, url, context):
     cut_minutes = context.user_data.get('cut', 'cut_no').replace('cut_', '').replace('no', '0')
     fmt = context.user_data.get('fmt', 'fmt_text')
@@ -241,7 +254,26 @@ async def process_video(chat_id, url, context):
                 elif status == "error":
                     await _update_progress(context, chat_id, msg_id, 'error')
                     error = data.get("error", "Неизвестная ошибка")
-                    await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {error}")
+                    # Detect YouTube-specific errors
+                    yt_keywords = ["youtube", "sign in", "bot", "cookie", "yt-dlp", "403"]
+                    is_yt_error = any(kw in error.lower() for kw in yt_keywords)
+                    if is_yt_error:
+                        kb = InlineKeyboardMarkup([[
+                            InlineKeyboardButton("🔄 Перезапустить чат", callback_data="retry_fresh")
+                        ]])
+                        await context.bot.send_message(
+                            chat_id=chat_id,
+                            text=(
+                                f"❌ Ошибка YouTube: {error[:300]}\n\n"
+                                "⚠️ YouTube временно блокирует скачивание.\n"
+                                "Нажми кнопку ниже — перезапусти чат и отправь ссылку заново."
+                            ),
+                            reply_markup=kb
+                        )
+                    else:
+                        await context.bot.send_message(
+                            chat_id=chat_id, text=f"❌ Ошибка: {error}"
+                        )
                     return
 
             await _update_progress(context, chat_id, msg_id, 'error')
@@ -435,6 +467,7 @@ def main():
     app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
+    app.add_handler(CallbackQueryHandler(handle_retry, pattern="^retry_fresh$"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
     app.add_handler(MessageHandler(
