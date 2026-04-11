@@ -139,15 +139,42 @@ async def handle_lang_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+PROGRESS_STAGES = {
+    'waking':       '⬜⬜⬜⬜⬜  Запускаю сервер...',
+    'pending':      '🟩⬜⬜⬜⬜  Сервер готов. Создаю задачу...',
+    'downloading':  '🟩🟨⬜⬜⬜  Скачиваю аудио...',
+    'transcribing': '🟩🟩🟨⬜⬜  Транскрибирую (Whisper AI)...',
+    'formatting':   '🟩🟩🟩🟨⬜  Форматирую текст (Claude AI)...',
+    'done':         '🟩🟩🟩🟩🟩  ✅ Готово!',
+    'error':        '🟥🟥🟥🟥🟥  ❌ Ошибка',
+}
+
+
+async def _update_progress(context, chat_id, msg_id, stage_key):
+    """Edit progress message to show current stage."""
+    text = PROGRESS_STAGES.get(stage_key, stage_key)
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id, message_id=msg_id, text=text
+        )
+    except Exception:
+        pass  # ignore "message not modified" errors
+
+
 async def process_video(chat_id, url, context):
     cut_minutes = context.user_data.get('cut', 'cut_no').replace('cut_', '').replace('no', '0')
     fmt = context.user_data.get('fmt', 'fmt_text')
     language = context.user_data.get('lang', 'lang_auto').replace('lang_', '')
 
     try:
+        # Send initial progress message (will be edited in-place)
+        progress_msg = await context.bot.send_message(
+            chat_id=chat_id, text=PROGRESS_STAGES['waking']
+        )
+        msg_id = progress_msg.message_id
+
         async with httpx.AsyncClient(timeout=300.0) as client:
-            # Шаг 0: разбудить Render (может занять 30 сек)
-            await context.bot.send_message(chat_id=chat_id, text='🔄 Запускаю сервер обработки...')
+            # Шаг 0: разбудить Render
             for attempt in range(5):
                 try:
                     ping = await client.get(f"{API_URL}/api/health", timeout=15.0)
@@ -157,10 +184,7 @@ async def process_video(chat_id, url, context):
                     pass
                 await asyncio.sleep(8)
 
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text='⏳ Обрабатываю видео...\nЭто займёт 1-3 минуты. Пожалуйста подожди!'
-            )
+            await _update_progress(context, chat_id, msg_id, 'pending')
 
             # Шаг 1: создать задачу
             resp = await client.post(f"{API_URL}/api/tasks/create", json={
@@ -170,9 +194,12 @@ async def process_video(chat_id, url, context):
                 "language": language,
             })
             if resp.status_code != 200:
+                await _update_progress(context, chat_id, msg_id, 'error')
                 await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка создания задачи: {resp.text[:200]}")
                 return
             task_id = resp.json().get("task_id")
+
+            last_stage = None
 
             # Шаг 2: polling каждые 10 сек
             for attempt in range(60):
@@ -183,23 +210,41 @@ async def process_video(chat_id, url, context):
                         timeout=30.0
                     )
                     if not status_resp.text.strip():
-                        continue  # пустой ответ — Render просыпается, ждём
+                        continue
                     data = status_resp.json()
                 except (httpx.TimeoutException, json.JSONDecodeError):
-                    continue  # временная ошибка — продолжаем polling
+                    continue
 
                 status = data.get("status")
+                stage = data.get("stage", status)
+
+                # Update progress bar if stage changed
+                if stage != last_stage and stage in PROGRESS_STAGES:
+                    await _update_progress(context, chat_id, msg_id, stage)
+                    last_stage = stage
 
                 if status == "done":
+                    await _update_progress(context, chat_id, msg_id, 'done')
                     text = data.get("transcription", data.get("text", "Готово!"))
-                    await context.bot.send_message(chat_id=chat_id, text=f"✅ Готово!\n\n{text[:3500]}")
+                    # Send formatted text with HTML parsing
+                    result_text = "✅ <b>Готово!</b>\n\n" + text[:3500]
+                    try:
+                        await context.bot.send_message(
+                            chat_id=chat_id, text=result_text, parse_mode="HTML"
+                        )
+                    except Exception:
+                        # Fallback without HTML if formatting causes errors
+                        await context.bot.send_message(
+                            chat_id=chat_id, text=f"✅ Готово!\n\n{text[:3500]}"
+                        )
                     return
                 elif status == "error":
+                    await _update_progress(context, chat_id, msg_id, 'error')
                     error = data.get("error", "Неизвестная ошибка")
                     await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {error}")
                     return
-                # status == "processing" — продолжаем ждать
 
+            await _update_progress(context, chat_id, msg_id, 'error')
             await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (10 мин). Попробуй более короткое видео.")
 
     except Exception as e:
