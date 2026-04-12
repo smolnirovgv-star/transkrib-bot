@@ -302,13 +302,13 @@ async def cmd_plan(update, context):
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
     text += nl + nl + "📦 *Тарифы:*" + nl
-    text += "🚀 Starter — 450₽ / $5 — безлимит, 5 дней" + nl
-    text += "💼 Pro — 1700₽ / $20 — безлимит, 30 дней" + nl
-    text += "👑 Annual — 8900₽ / $100 — безлимит, 1 год"
+    text += "⭐ Базовый — 450₽ / $5 — безлимит, 5 дней" + nl
+    text += "🚀 Стандарт — 1700₽ / $20 — безлимит, 30 дней" + nl
+    text += "👑 Про — 8900₽ / $100 — безлимит, 1 год"
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🚀 Starter", callback_data="buy_starter"),
-        InlineKeyboardButton("💼 Pro", callback_data="buy_pro"),
-        InlineKeyboardButton("👑 Annual", callback_data="buy_annual"),
+        InlineKeyboardButton("⭐ Базовый", callback_data="buy_starter"),
+        InlineKeyboardButton("🚀 Стандарт", callback_data="buy_pro"),
+        InlineKeyboardButton("👑 Про", callback_data="buy_annual"),
     ]])
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
 
@@ -398,13 +398,13 @@ async def handle_show_plan(update, context):
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
     text += nl + nl + "📦 *Тарифы:*" + nl
-    text += "🚀 Starter — 450₽ / $5 — безлимит, 5 дней" + nl
-    text += "💼 Pro — 1700₽ / $20 — безлимит, 30 дней" + nl
-    text += "👑 Annual — 8900₽ / $100 — безлимит, 1 год"
+    text += "⭐ Базовый — 450₽ / $5 — безлимит, 5 дней" + nl
+    text += "🚀 Стандарт — 1700₽ / $20 — безлимит, 30 дней" + nl
+    text += "👑 Про — 8900₽ / $100 — безлимит, 1 год"
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🚀 Starter", callback_data="buy_starter"),
-        InlineKeyboardButton("💼 Pro", callback_data="buy_pro"),
-        InlineKeyboardButton("👑 Annual", callback_data="buy_annual"),
+        InlineKeyboardButton("⭐ Базовый", callback_data="buy_starter"),
+        InlineKeyboardButton("🚀 Стандарт", callback_data="buy_pro"),
+        InlineKeyboardButton("👑 Про", callback_data="buy_annual"),
     ]])
     await query.edit_message_reply_markup(reply_markup=None)
     await context.bot.send_message(chat_id=tid, text=text, parse_mode="Markdown", reply_markup=kb)
@@ -421,9 +421,9 @@ async def cmd_help(update, context):
         "• 🌍 Язык — Авто, Русский, English\n\n"
         "💳 *Тарифы:*\n"
         "• 🆓 Free — 3 видео бесплатно\n"
-        "• 🚀 Starter — $9/мес (30 видео)\n"
-        "• 💼 Pro — $29/мес (безлимит)\n"
-        "• 👑 Annual — $99/год (безлимит)\n\n"
+        "• ⭐ Базовый — 450₽/$5 (безлимит, 5 дней)\n"
+        "• 🚀 Стандарт — 1700₽/$20 (безлимит, 30 дней)\n"
+        "• 👑 Про — 8900₽/$100 (безлимит, 1 год)\n\n"
         "📌 *Команды:*\n"
         "/start — главная страница\n"
         "/plan — мой тариф\n"

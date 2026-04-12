@@ -15,9 +15,9 @@ PLANS = {
 }
 
 PLAN_PRICES = {
-    "starter": {"rub": "450",  "usd": "5",  "days": 5,   "videos_limit": 9999, "name": "🚀 Starter"},
-    "pro":     {"rub": "1700", "usd": "20", "days": 30,  "videos_limit": 9999, "name": "💼 Pro"},
-    "annual":  {"rub": "8900", "usd": "100","days": 365, "videos_limit": 9999, "name": "👑 Annual"},
+    "starter": {"rub": "450",  "usd": "5",  "days": 5,   "videos_limit": 9999, "name": "⭐ Базовый"},
+    "pro":     {"rub": "1700", "usd": "20", "days": 30,  "videos_limit": 9999, "name": "🚀 Стандарт"},
+    "annual":  {"rub": "8900", "usd": "100","days": 365, "videos_limit": 9999, "name": "👑 Про"},
 }
 
 LEMON_LINKS = {
@@ -79,7 +79,7 @@ def get_status_text(tid: int) -> str:
     used = user["videos_used"]
     limit = user["videos_limit"]
     exp = (user.get("plan_expires_at") or "")[:10]
-    names = {"free": "🆓 Free", "starter": "🚀 Starter",
+    names = {"free": "🆓 Free", "starter": "⭐ Базовый",
              "pro": "💼 Pro", "annual": "👑 Annual"}
     name = names.get(plan, plan)
     nl = chr(10)
