@@ -14,6 +14,18 @@ PLANS = {
     "annual":  {"videos_limit": 9999, "days": 365,  "price": 99},
 }
 
+PLAN_PRICES = {
+    "starter": {"rub": "450",  "usd": "5",  "days": 30,  "videos_limit": 30,   "name": "🚀 Starter"},
+    "pro":     {"rub": "1700", "usd": "20", "days": 30,  "videos_limit": 9999, "name": "💼 Pro"},
+    "annual":  {"rub": "8900", "usd": "100","days": 365, "videos_limit": 9999, "name": "👑 Annual"},
+}
+
+LEMON_LINKS = {
+    "starter": "https://transkrib.lemonsqueezy.com/buy/starter",
+    "pro":     "https://transkrib.lemonsqueezy.com/buy/pro",
+    "annual":  "https://transkrib.lemonsqueezy.com/buy/annual",
+}
+
 
 def get_user(tid: int) -> dict:
     res = supabase.table("bot_users").select("*").eq("telegram_id", tid).execute()
@@ -22,6 +34,22 @@ def get_user(tid: int) -> dict:
     new = {"telegram_id": tid, "plan": "free", "videos_used": 0, "videos_limit": 3}
     supabase.table("bot_users").insert(new).execute()
     return new
+
+
+def activate_plan(tid: int, plan: str) -> None:
+    """Activate paid plan for user (called after successful payment)."""
+    from datetime import timedelta
+    plan_info = PLAN_PRICES.get(plan)
+    if not plan_info:
+        return
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=plan_info["days"])).isoformat()
+    supabase.table("bot_users").upsert({
+        "telegram_id": tid,
+        "plan": plan,
+        "videos_limit": plan_info["videos_limit"],
+        "videos_used": 0,
+        "plan_expires_at": expires_at,
+    }).execute()
 
 
 def can_process(tid: int) -> tuple:

@@ -4,7 +4,7 @@ import asyncio
 import httpx
 from dotenv import load_dotenv
 load_dotenv()
-from billing import can_process, increment_usage, get_status_text
+from billing import can_process, increment_usage, get_status_text, PLAN_PRICES, LEMON_LINKS
 from claude_assistant import ask_claude
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
@@ -302,13 +302,13 @@ async def cmd_plan(update, context):
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
     text += nl + nl + "📦 *Тарифы:*" + nl
-    text += "🚀 Starter — $9/мес (30 видео)" + nl
-    text += "💼 Pro — $29/мес (безлимит)" + nl
-    text += "👑 Annual — $99/год (безлимит)"
+    text += "🚀 Starter — 450₽ / $5 — 30 видео, 30 дней" + nl
+    text += "💼 Pro — 1700₽ / $20 — безлимит, 30 дней" + nl
+    text += "👑 Annual — 8900₽ / $100 — безлимит, 1 год"
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🚀 $9/мес", callback_data="buy_starter"),
-        InlineKeyboardButton("💼 $29/мес", callback_data="buy_pro"),
-        InlineKeyboardButton("👑 $99/год", callback_data="buy_annual"),
+        InlineKeyboardButton("🚀 Starter", callback_data="buy_starter"),
+        InlineKeyboardButton("💼 Pro", callback_data="buy_pro"),
+        InlineKeyboardButton("👑 Annual", callback_data="buy_annual"),
     ]])
     await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
 
@@ -317,19 +317,68 @@ async def handle_buy(update, context):
     query = update.callback_query
     await query.answer()
     plan = query.data.replace("buy_", "")
-    links = {
-        "starter": "https://transkrib.lemonsqueezy.com/buy/starter",
-        "pro":     "https://transkrib.lemonsqueezy.com/buy/pro",
-        "annual":  "https://transkrib.lemonsqueezy.com/buy/annual",
-    }
-    prices = {"starter": "$9/мес", "pro": "$29/мес", "annual": "$99/год"}
+    p = PLAN_PRICES.get(plan)
+    if not p:
+        return
     nl = chr(10)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(f"🇷🇺 {p['rub']}₽ — Оплатить (ЮКасса)", callback_data=f"currency_rub_{plan}"),
+        InlineKeyboardButton(f"🇺🇸 ${p['usd']} — Pay (LemonSqueezy)", callback_data=f"currency_usd_{plan}"),
+    ]])
     await query.edit_message_text(
-        f"💳 *{plan.capitalize()}* — {prices.get(plan)}" + nl + nl
-        + f"[Перейти к оплате]({links.get(plan)})" + nl + nl
-        + "После оплаты напиши /plan для проверки.",
-        parse_mode="Markdown"
+        f"💳 *{p['name']}*" + nl + nl
+        + f"🇷🇺 {p['rub']}₽ / 🇺🇸 ${p['usd']}" + nl + nl
+        + "Выбери валюту оплаты:",
+        parse_mode="Markdown",
+        reply_markup=kb,
     )
+
+
+async def handle_currency(update, context):
+    query = update.callback_query
+    await query.answer()
+    _, currency, plan = query.data.split("_", 2)
+    p = PLAN_PRICES.get(plan)
+    if not p:
+        return
+    nl = chr(10)
+
+    if currency == "usd":
+        link = LEMON_LINKS.get(plan, "")
+        await query.edit_message_text(
+            f"💳 *{p['name']}* — ${p['usd']}/мес" + nl + nl
+            + f"[Pay with LemonSqueezy]({link})" + nl + nl
+            + "После оплаты напиши /plan для проверки.",
+            parse_mode="Markdown",
+        )
+        return
+
+    # ₽ — create YooKassa payment via API
+    tid = query.from_user.id
+    await query.edit_message_text("⏳ Создаю ссылку на оплату...")
+    import httpx as _httpx
+    try:
+        async with _httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(
+                f"{API_URL}/api/bot/payments/yookassa/create",
+                json={"telegram_id": tid, "plan": plan},
+            )
+        data = resp.json()
+        if "error" in data:
+            await context.bot.send_message(chat_id=tid, text=f"❌ Ошибка: {data['error']}")
+            return
+        payment_url = data["payment_url"]
+        await context.bot.send_message(
+            chat_id=tid,
+            text=(
+                f"💳 *{p['name']}* — {p['rub']}₽" + nl + nl
+                + f"[🔗 Перейти к оплате]({payment_url})" + nl + nl
+                + "После оплаты тариф активируется автоматически."
+            ),
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        await context.bot.send_message(chat_id=tid, text=f"❌ Ошибка платежа: {str(e)[:200]}")
 
 
 async def handle_show_plan(update, context):
@@ -338,10 +387,14 @@ async def handle_show_plan(update, context):
     tid = query.from_user.id
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
+    text += nl + nl + "📦 *Тарифы:*" + nl
+    text += "🚀 Starter — 450₽ / $5 — 30 видео, 30 дней" + nl
+    text += "💼 Pro — 1700₽ / $20 — безлимит, 30 дней" + nl
+    text += "👑 Annual — 8900₽ / $100 — безлимит, 1 год"
     kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🚀 $9/мес", callback_data="buy_starter"),
-        InlineKeyboardButton("💼 $29/мес", callback_data="buy_pro"),
-        InlineKeyboardButton("👑 $99/год", callback_data="buy_annual"),
+        InlineKeyboardButton("🚀 Starter", callback_data="buy_starter"),
+        InlineKeyboardButton("💼 Pro", callback_data="buy_pro"),
+        InlineKeyboardButton("👑 Annual", callback_data="buy_annual"),
     ]])
     await query.edit_message_reply_markup(reply_markup=None)
     await context.bot.send_message(chat_id=tid, text=text, parse_mode="Markdown", reply_markup=kb)
@@ -481,6 +534,7 @@ def main():
     app.add_handler(CommandHandler("cancel", cmd_cancel))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
+    app.add_handler(CallbackQueryHandler(handle_currency, pattern="^currency_"))
     app.add_handler(CallbackQueryHandler(handle_retry, pattern="^retry_fresh$"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
