@@ -9,13 +9,13 @@ supabase = create_client(
 
 PLANS = {
     "free":    {"videos_limit": 3,    "days": None, "price": 0},
-    "starter": {"videos_limit": 30,   "days": 30,   "price": 9},
+    "starter": {"videos_limit": 9999, "days": 5,    "price": 9},
     "pro":     {"videos_limit": 9999, "days": 30,   "price": 29},
     "annual":  {"videos_limit": 9999, "days": 365,  "price": 99},
 }
 
 PLAN_PRICES = {
-    "starter": {"rub": "450",  "usd": "5",  "days": 30,  "videos_limit": 30,   "name": "🚀 Starter"},
+    "starter": {"rub": "450",  "usd": "5",  "days": 5,   "videos_limit": 9999, "name": "🚀 Starter"},
     "pro":     {"rub": "1700", "usd": "20", "days": 30,  "videos_limit": 9999, "name": "💼 Pro"},
     "annual":  {"rub": "8900", "usd": "100","days": 365, "videos_limit": 9999, "name": "👑 Annual"},
 }

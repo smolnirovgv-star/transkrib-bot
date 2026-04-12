@@ -302,7 +302,7 @@ async def cmd_plan(update, context):
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
     text += nl + nl + "📦 *Тарифы:*" + nl
-    text += "🚀 Starter — 450₽ / $5 — 30 видео, 30 дней" + nl
+    text += "🚀 Starter — 450₽ / $5 — безлимит, 5 дней" + nl
     text += "💼 Pro — 1700₽ / $20 — безлимит, 30 дней" + nl
     text += "👑 Annual — 8900₽ / $100 — безлимит, 1 год"
     kb = InlineKeyboardMarkup([[
@@ -358,10 +358,20 @@ async def handle_currency(update, context):
     await query.edit_message_text("⏳ Создаю ссылку на оплату...")
     import httpx as _httpx
     try:
-        async with _httpx.AsyncClient(timeout=20.0) as client:
+        # Wake up Render (free tier sleeps)
+        async with _httpx.AsyncClient(timeout=60.0) as client:
+            for _attempt in range(5):
+                try:
+                    _ping = await client.get(f"{API_URL}/api/health", timeout=15.0)
+                    if _ping.status_code < 500:
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(8)
             resp = await client.post(
                 f"{API_URL}/api/bot/payments/yookassa/create",
                 json={"telegram_id": tid, "plan": plan},
+                timeout=60.0,
             )
         data = resp.json()
         if "error" in data:
@@ -388,7 +398,7 @@ async def handle_show_plan(update, context):
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
     text += nl + nl + "📦 *Тарифы:*" + nl
-    text += "🚀 Starter — 450₽ / $5 — 30 видео, 30 дней" + nl
+    text += "🚀 Starter — 450₽ / $5 — безлимит, 5 дней" + nl
     text += "💼 Pro — 1700₽ / $20 — безлимит, 30 дней" + nl
     text += "👑 Annual — 8900₽ / $100 — безлимит, 1 год"
     kb = InlineKeyboardMarkup([[
