@@ -21,9 +21,9 @@ PLAN_PRICES = {
 }
 
 LEMON_LINKS = {
-    "starter": "https://transkrib.lemonsqueezy.com/buy/starter",
-    "pro":     "https://transkrib.lemonsqueezy.com/buy/pro",
-    "annual":  "https://transkrib.lemonsqueezy.com/buy/annual",
+    "starter": "https://transkrib.lemonsqueezy.com/buy/1522783",
+    "pro":     "https://transkrib.lemonsqueezy.com/buy/1522789",
+    "annual":  "https://transkrib.lemonsqueezy.com/buy/1522790",
 }
 
 
