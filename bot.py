@@ -216,12 +216,10 @@ async def process_video(chat_id, url, context):
                 "language": language,
             })
             if resp.status_code != 200:
-                await _send_admin_log(context, f"Task create FAILED {resp.status_code}: {resp.text[:300]}")
                 await _update_progress(context, chat_id, msg_id, 'error')
                 await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка создания задачи: {resp.text[:200]}")
                 return
             task_id = resp.json().get("task_id")
-            await _send_admin_log(context, f"Task created: {task_id} | url: {url[:80]}")
 
             last_stage = None
 
@@ -244,12 +242,14 @@ async def process_video(chat_id, url, context):
 
                 # Update progress bar if stage changed
                 if stage != last_stage and stage in PROGRESS_STAGES:
-                    await _send_admin_log(context, f"Stage: {stage} | task: {task_id}")
                     await _update_progress(context, chat_id, msg_id, stage)
                     last_stage = stage
 
                 if status == "done":
-                    await _update_progress(context, chat_id, msg_id, 'done')
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                    except Exception:
+                        pass
                     text = data.get("transcription", data.get("text", "Готово!"))
                     # Send formatted text with HTML parsing
                     result_text = "✅ <b>Готово!</b>\n\n" + text[:3500]
@@ -266,7 +266,6 @@ async def process_video(chat_id, url, context):
                 elif status == "error":
                     await _update_progress(context, chat_id, msg_id, 'error')
                     error = data.get("error", "Неизвестная ошибка")
-                    await _send_admin_log(context, f"Error: {error[:400]} | task: {task_id}")
                     # Detect YouTube-specific errors
                     yt_keywords = ["youtube", "sign in", "bot", "cookie", "yt-dlp", "403"]
                     is_yt_error = any(kw in error.lower() for kw in yt_keywords)
@@ -289,12 +288,10 @@ async def process_video(chat_id, url, context):
                         )
                     return
 
-            await _send_admin_log(context, f"TIMEOUT after 10 min | task: {task_id}")
             await _update_progress(context, chat_id, msg_id, 'error')
             await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (10 мин). Попробуй более короткое видео.")
 
     except Exception as e:
-        await _send_admin_log(context, f"Exception in process_video: {str(e)[:400]}")
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)[:200]}")
 
 
