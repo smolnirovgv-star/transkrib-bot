@@ -140,6 +140,22 @@ async def handle_lang_choice(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+def split_message(text: str, max_len: int = 4000) -> list:
+    if len(text) <= max_len:
+        return [text]
+    parts = []
+    while text:
+        if len(text) <= max_len:
+            parts.append(text)
+            break
+        split_at = text.rfind('\n', 0, max_len)
+        if split_at == -1:
+            split_at = max_len
+        parts.append(text[:split_at])
+        text = text[split_at:].lstrip('\n')
+    return parts
+
+
 async def _send_admin_log(context, text):
     """Send debug log to admin."""
     try:
@@ -251,17 +267,18 @@ async def process_video(chat_id, url, context):
                     except Exception:
                         pass
                     text = data.get("transcription", data.get("text", "Готово!"))
-                    # Send formatted text with HTML parsing
-                    result_text = "✅ <b>Готово!</b>\n\n" + text[:3500]
+                    result_text = "✅ <b>Готово!</b>\n\n" + text
                     try:
-                        await context.bot.send_message(
-                            chat_id=chat_id, text=result_text, parse_mode="HTML"
-                        )
+                        for part in split_message(result_text):
+                            await context.bot.send_message(
+                                chat_id=chat_id, text=part, parse_mode="HTML"
+                            )
                     except Exception:
                         # Fallback without HTML if formatting causes errors
-                        await context.bot.send_message(
-                            chat_id=chat_id, text=f"✅ Готово!\n\n{text[:3500]}"
-                        )
+                        for part in split_message("✅ Готово!\n\n" + text):
+                            await context.bot.send_message(
+                                chat_id=chat_id, text=part
+                            )
                     return
                 elif status == "error":
                     await _update_progress(context, chat_id, msg_id, 'error')
