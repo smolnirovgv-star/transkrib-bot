@@ -1,4 +1,5 @@
 import os
+import io
 import json
 import asyncio
 import httpx
@@ -267,18 +268,28 @@ async def process_video(chat_id, url, context):
                     except Exception:
                         pass
                     text = data.get("transcription", data.get("text", "Готово!"))
-                    result_text = "✅ <b>Готово!</b>\n\n" + text
-                    try:
-                        for part in split_message(result_text):
-                            await context.bot.send_message(
-                                chat_id=chat_id, text=part, parse_mode="HTML"
-                            )
-                    except Exception:
-                        # Fallback without HTML if formatting causes errors
-                        for part in split_message("✅ Готово!\n\n" + text):
-                            await context.bot.send_message(
-                                chat_id=chat_id, text=part
-                            )
+                    if fmt == "fmt_srt":
+                        srt_bytes = text.encode("utf-8")
+                        srt_file = io.BytesIO(srt_bytes)
+                        srt_file.name = "subtitles.srt"
+                        await context.bot.send_document(
+                            chat_id=chat_id,
+                            document=srt_file,
+                            caption="✅ SRT субтитры готовы! Импортируй в видеоредактор.",
+                            filename="subtitles.srt",
+                        )
+                    else:
+                        result_text = "✅ <b>Готово!</b>\n\n" + text
+                        try:
+                            for part in split_message(result_text):
+                                await context.bot.send_message(
+                                    chat_id=chat_id, text=part, parse_mode="HTML"
+                                )
+                        except Exception:
+                            for part in split_message("✅ Готово!\n\n" + text):
+                                await context.bot.send_message(
+                                    chat_id=chat_id, text=part
+                                )
                     return
                 elif status == "error":
                     await _update_progress(context, chat_id, msg_id, 'error')
