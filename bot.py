@@ -11,6 +11,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotComm
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+_daily_usage_store = []  # list of {date, input_tokens, output_tokens, cost_usd}
 API_URL = os.environ.get("TRANSKRIB_API_URL", "https://transkrib-api.onrender.com")
 
 ADMIN_ID = 5052641158
@@ -295,6 +296,19 @@ async def process_video(chat_id, url, context):
                     except Exception:
                         pass
                     text = data.get("transcription", data.get("text", "Готово!"))
+                    usage = data.get("claude_usage", {})
+                    admin_suffix = ""
+                    if usage and chat_id == ADMIN_ID:
+                        inp = usage.get("input_tokens", 0)
+                        out = usage.get("output_tokens", 0)
+                        cost = usage.get("cost_usd", 0)
+                        admin_suffix = f"\n\n<i>🔧 in:{inp} out:{out} ${cost:.4f}</i>"
+                        _daily_usage_store.append({
+                            "date": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d"),
+                            "input_tokens": inp,
+                            "output_tokens": out,
+                            "cost_usd": cost,
+                        })
                     if fmt == "fmt_srt":
                         srt_bytes = text.encode("utf-8")
                         srt_file = io.BytesIO(srt_bytes)
@@ -306,7 +320,7 @@ async def process_video(chat_id, url, context):
                             filename="subtitles.srt",
                         )
                     else:
-                        result_text = "✅ <b>Готово!</b>\n\n" + text
+                        result_text = "✅ <b>Готово!</b>\n\n" + text + admin_suffix
                         try:
                             for part in split_message(result_text):
                                 await context.bot.send_message(
@@ -579,6 +593,29 @@ async def handle_chat(update, context):
     await update.message.reply_text(answer)
 
 
+async def _daily_cost_summary(context):
+    """Send daily Claude cost summary to admin at 20:00 MSK."""
+    from datetime import datetime, timezone, timedelta
+    msk_now = datetime.now(timezone.utc) + timedelta(hours=3)
+    today = msk_now.strftime("%Y-%m-%d")
+    total_inp = total_out = total_cost = 0.0
+    for rec in list(_daily_usage_store):
+        if rec.get("date") == today:
+            total_inp += rec.get("input_tokens", 0)
+            total_out += rec.get("output_tokens", 0)
+            total_cost += rec.get("cost_usd", 0.0)
+    warning = "\n⚠️ Высокие расходы!" if total_cost > 5 else ""
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=(
+            f"📊 Сводка за {today}:\n"
+            f"Input: {int(total_inp):,} tok\n"
+            f"Output: {int(total_out):,} tok\n"
+            f"Стоимость: ${total_cost:.4f}{warning}"
+        ),
+    )
+
+
 async def post_init(app):
     cookies_updated_at = os.environ.get("COOKIES_UPDATED_AT", "").strip()
     if cookies_updated_at:
@@ -631,6 +668,10 @@ def main():
         filters.TEXT & ~filters.COMMAND & ~filters.Regex(r'https?://'),
         handle_chat
     ))
+    job_queue = app.job_queue
+    if job_queue:
+        from datetime import time as _time
+        job_queue.run_daily(_daily_cost_summary, time=_time(17, 0, 0))  # 17:00 UTC = 20:00 MSK
     print("Bot started!")
     app.run_polling()
 
