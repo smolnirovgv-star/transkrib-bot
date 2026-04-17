@@ -187,6 +187,22 @@ async def _update_progress(context, chat_id, msg_id, stage_key):
         pass  # ignore "message not modified" errors
 
 
+async def handle_stop(update, context):
+    """Handle Stop button — cancel the running task."""
+    query = update.callback_query
+    await query.answer()
+    task_id = query.data.replace('stop_', '', 1)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(f"{API_URL}/api/tasks/{task_id}/cancel")
+    except Exception:
+        pass
+    try:
+        await query.edit_message_text(text="⛔ Обработка остановлена")
+    except Exception:
+        pass
+
+
 async def handle_retry(update, context):
     """Handle retry button — reset conversation and prompt for new URL."""
     query = update.callback_query
@@ -238,6 +254,13 @@ async def process_video(chat_id, url, context):
                 return
             task_id = resp.json().get("task_id")
 
+            stop_kb = InlineKeyboardMarkup([[InlineKeyboardButton("⛔ Стоп", callback_data=f"stop_{task_id}")]])
+            stop_msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text="⏳ Обрабатываю... нажми Стоп чтобы отменить",
+                reply_markup=stop_kb,
+            )
+
             last_stage = None
 
             # Шаг 2: polling каждые 10 сек
@@ -267,6 +290,10 @@ async def process_video(chat_id, url, context):
                         await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
                     except Exception:
                         pass
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=stop_msg.message_id)
+                    except Exception:
+                        pass
                     text = data.get("transcription", data.get("text", "Готово!"))
                     if fmt == "fmt_srt":
                         srt_bytes = text.encode("utf-8")
@@ -290,6 +317,12 @@ async def process_video(chat_id, url, context):
                                 await context.bot.send_message(
                                     chat_id=chat_id, text=part
                                 )
+                    return
+                elif status == "cancelled":
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                    except Exception:
+                        pass
                     return
                 elif status == "error":
                     await _update_progress(context, chat_id, msg_id, 'error')
@@ -547,6 +580,19 @@ async def handle_chat(update, context):
 
 
 async def post_init(app):
+    cookies_updated_at = os.environ.get("COOKIES_UPDATED_AT", "").strip()
+    if cookies_updated_at:
+        try:
+            from datetime import datetime, timezone, timedelta
+            updated = datetime.strptime(cookies_updated_at, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            days_old = (datetime.now(timezone.utc) - updated).days
+            if days_old > 80:
+                await app.bot.send_message(
+                    chat_id=ADMIN_ID,
+                    text=f"⚠️ Cookies YouTube скоро протухнут! Обнови их в Render Secret Files. (возраст: {days_old} дней)"
+                )
+        except Exception:
+            pass
     await app.bot.set_my_commands([
         BotCommand("start",  "🚀 Главная — выбор языка"),
         BotCommand("plan",   "💳 Мой тариф и подписка"),
@@ -577,6 +623,7 @@ def main():
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(handle_currency, pattern="^currency_"))
+    app.add_handler(CallbackQueryHandler(handle_stop, pattern="^stop_"))
     app.add_handler(CallbackQueryHandler(handle_retry, pattern="^retry_fresh$"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
     app.add_handler(CallbackQueryHandler(handle_language, pattern="^lang_(?:ru|en|hi|zh|ko|pt)$"))
