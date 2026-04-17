@@ -22,7 +22,7 @@ WAITING_FORMAT = 2
 WAITING_LANG = 3
 
 CUT_LABELS = {'cut_1': '1 мин', 'cut_3': '3 мин', 'cut_5': '5 мин', 'cut_10': '10 мин', 'cut_15': '15 мин', 'cut_no': 'Без сокращения'}
-FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры'}
+FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры', 'fmt_md': 'Markdown (.md)'}
 LANG_LABELS = {'lang_auto': '🔄 Авто', 'lang_ru': '🇷🇺 Русский', 'lang_en': '🇬🇧 English'}
 
 LANG_MESSAGES = {
@@ -99,6 +99,7 @@ async def handle_cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton('Только транскрипция', callback_data='fmt_text')],
         [InlineKeyboardButton('Транскрипция + нарезка', callback_data='fmt_cut')],
         [InlineKeyboardButton('SRT субтитры', callback_data='fmt_srt')],
+        [InlineKeyboardButton('📝 Markdown (.md)', callback_data='fmt_md')],
     ]
     await query.edit_message_text(
         '📄 Что создать?',
@@ -309,7 +310,17 @@ async def process_video(chat_id, url, context):
                             "output_tokens": out,
                             "cost_usd": cost,
                         })
-                    if fmt == "fmt_srt":
+                    if fmt == "fmt_md":
+                        md_bytes = (text + admin_suffix.replace("<i>", "").replace("</i>", "")).encode("utf-8")
+                        md_file = io.BytesIO(md_bytes)
+                        md_file.name = "transcript.md"
+                        await context.bot.send_document(
+                            chat_id=chat_id,
+                            document=md_file,
+                            caption="✅ Транскрипция готова в формате Markdown!",
+                            filename="transcript.md",
+                        )
+                    elif fmt == "fmt_srt":
                         srt_bytes = text.encode("utf-8")
                         srt_file = io.BytesIO(srt_bytes)
                         srt_file.name = "subtitles.srt"
