@@ -21,7 +21,7 @@ WAITING_CUT = 1
 WAITING_FORMAT = 2
 WAITING_LANG = 3
 
-CUT_LABELS = {'cut_1': '1 мин', 'cut_3': '3 мин', 'cut_5': '5 мин', 'cut_10': '10 мин', 'cut_15': '15 мин', 'cut_no': 'Без сокращения'}
+CUT_LABELS = {'cut_5': '5 мин', 'cut_10': '10 мин', 'cut_15': '15 мин', 'cut_20': '20 мин', 'cut_30': '30 мин', 'cut_no': 'Без сокращения'}
 FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры', 'fmt_md': 'Markdown (.md)'}
 LANG_LABELS = {'lang_auto': '🔄 Авто', 'lang_ru': '🇷🇺 Русский', 'lang_en': '🇬🇧 English'}
 
@@ -76,12 +76,12 @@ async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     context.user_data['url'] = url
     keyboard = [[
-        InlineKeyboardButton('1 мин', callback_data='cut_1'),
-        InlineKeyboardButton('3 мин', callback_data='cut_3'),
         InlineKeyboardButton('5 мин', callback_data='cut_5'),
-    ],[
         InlineKeyboardButton('10 мин', callback_data='cut_10'),
         InlineKeyboardButton('15 мин', callback_data='cut_15'),
+    ],[
+        InlineKeyboardButton('20 мин', callback_data='cut_20'),
+        InlineKeyboardButton('30 мин', callback_data='cut_30'),
         InlineKeyboardButton('Без сокращения', callback_data='cut_no'),
     ]]
     await update.message.reply_text(
@@ -189,6 +189,25 @@ async def _update_progress(context, chat_id, msg_id, stage_key):
         pass  # ignore "message not modified" errors
 
 
+async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обрабатывает кнопки изменения длины нарезки."""
+    query = update.callback_query
+    await query.answer()
+    if query.data == "recut_ok":
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+    minutes = query.data.replace("recut_", "")
+    await query.edit_message_reply_markup(reply_markup=None)
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            f"🔄 Хорошо! Для нарезки на <b>{minutes} мин</b> отправьте ссылку заново "
+            f"и выберите <b>{minutes} мин</b> в меню."
+        ),
+        parse_mode="HTML"
+    )
+
+
 async def handle_stop(update, context):
     """Handle Stop button — cancel the running task."""
     query = update.callback_query
@@ -287,6 +306,18 @@ async def process_video(chat_id, url, context):
                     await _update_progress(context, chat_id, msg_id, stage)
                     last_stage = stage
 
+                if status == "no_speech":
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                    except Exception:
+                        pass
+                    try:
+                        await context.bot.delete_message(chat_id=chat_id, message_id=stop_msg.message_id)
+                    except Exception:
+                        pass
+                    ns_text = data.get("transcription", "❌ Речь не обнаружена в видео.")
+                    await context.bot.send_message(chat_id=chat_id, text=ns_text, parse_mode="HTML")
+                    return
                 if status == "done":
                     try:
                         await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
@@ -342,6 +373,43 @@ async def process_video(chat_id, url, context):
                                 await context.bot.send_message(
                                     chat_id=chat_id, text=part
                                 )
+                    # Chunk warnings
+                    chunk_warning = data.get("chunk_warning")
+                    if chunk_warning:
+                        warn_type = chunk_warning.get("type")
+                        warn_msg = chunk_warning.get("message", "")
+                        kept = chunk_warning.get("kept_minutes", 0)
+                        suggestion = chunk_warning.get("suggestion_minutes", 0)
+                        if warn_type == "loss":
+                            warn_kb = InlineKeyboardMarkup([[
+                                InlineKeyboardButton(f"📈 Увеличить до {suggestion} мин", callback_data=f"recut_{suggestion}"),
+                                InlineKeyboardButton("✅ Оставить так", callback_data="recut_ok"),
+                            ]])
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=(
+                                    f"⚠️ <b>Важные моменты могут быть потеряны!</b>\n\n"
+                                    f"{warn_msg}\n\n"
+                                    f"📊 Вошло в нарезку: <b>{kept:.0f} мин</b>\n"
+                                    f"💡 Рекомендую увеличить до: <b>{suggestion} мин</b>"
+                                ),
+                                parse_mode="HTML", reply_markup=warn_kb,
+                            )
+                        elif warn_type == "surplus":
+                            warn_kb = InlineKeyboardMarkup([[
+                                InlineKeyboardButton(f"📉 Сократить до {suggestion} мин", callback_data=f"recut_{suggestion}"),
+                                InlineKeyboardButton("✅ Оставить так", callback_data="recut_ok"),
+                            ]])
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=(
+                                    f"✅ <b>Все ключевые моменты уложились!</b>\n\n"
+                                    f"{warn_msg}\n\n"
+                                    f"📊 Реальный объём: <b>{kept:.0f} мин</b>\n"
+                                    f"💡 Можно сократить до: <b>{suggestion} мин</b>"
+                                ),
+                                parse_mode="HTML", reply_markup=warn_kb,
+                            )
                     return
                 elif status == "cancelled":
                     try:
@@ -671,6 +739,7 @@ def main():
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(handle_currency, pattern="^currency_"))
+    app.add_handler(CallbackQueryHandler(handle_recut, pattern="^recut_"))
     app.add_handler(CallbackQueryHandler(handle_stop, pattern="^stop_"))
     app.add_handler(CallbackQueryHandler(handle_retry, pattern="^retry_fresh$"))
     app.add_handler(CallbackQueryHandler(handle_show_plan, pattern="^show_plan$"))
