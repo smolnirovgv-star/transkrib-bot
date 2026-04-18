@@ -173,6 +173,9 @@ PROGRESS_STAGES = {
     'downloading':  '🟩🟨⬜⬜⬜  Скачиваю аудио...',
     'transcribing': '🟩🟩🟨⬜⬜  Транскрибирую (Whisper AI)...',
     'formatting':   '🟩🟩🟩🟨⬜  Форматирую текст (Claude AI)...',
+    'analyzing_chunks': '🟩🟩🟩🟩⬜  Анализирую чанки (Claude AI)...',
+    'cutting_video': '🟩🟩🟩🟩⬜  Нарезаю видео (ffmpeg)...',
+    'cutting':      '🟩🟩🟩🟩⬜  Нарезаю видео...',
     'done':         '🟩🟩🟩🟩🟩  ✅ Готово!',
     'error':        '🟥🟥🟥🟥🟥  ❌ Ошибка',
 }
