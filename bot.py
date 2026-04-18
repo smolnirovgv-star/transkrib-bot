@@ -202,7 +202,7 @@ async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id=query.message.chat_id,
         text=(
             f"🔄 Хорошо! Для нарезки на <b>{minutes} мин</b> отправьте ссылку заново "
-            f"и выберите <b>{minutes} мин</b> в меню."
+            f"и выберите <b>{minutes} мин</b> в меню выбора длительности."
         ),
         parse_mode="HTML"
     )
@@ -373,6 +373,28 @@ async def process_video(chat_id, url, context):
                                 await context.bot.send_message(
                                     chat_id=chat_id, text=part
                                 )
+                    # Отправляем видео если есть
+                    video_path_api = data.get("output_video_path")
+                    if video_path_api and cut_minutes and cut_minutes != "0":
+                        try:
+                            video_url = f"{API_URL}/api/tasks/{task_id}/video"
+                            async with httpx.AsyncClient(timeout=120.0) as vclient:
+                                video_resp = await vclient.get(video_url)
+                                if video_resp.status_code == 200:
+                                    video_bytes = io.BytesIO(video_resp.content)
+                                    video_bytes.name = f"transkrib_{task_id[:8]}.mp4"
+                                    await context.bot.send_video(
+                                        chat_id=chat_id,
+                                        video=video_bytes,
+                                        caption=f"🎬 Нарезка: {cut_minutes} мин",
+                                        supports_streaming=True,
+                                    )
+                                    logger.info("Sent video to user %s", chat_id)
+                                else:
+                                    logger.warning("Video not available: %d", video_resp.status_code)
+                        except Exception as e_vid:
+                            logger.error("Failed to send video: %s", e_vid)
+
                     # Chunk warnings
                     chunk_warning = data.get("chunk_warning")
                     if chunk_warning:
