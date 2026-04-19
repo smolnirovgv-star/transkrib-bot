@@ -10,6 +10,22 @@ from claude_assistant import ask_claude
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
+import logging
+import sys
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    stream=sys.stdout,
+    force=True,
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.INFO)
+logging.getLogger("telegram.ext").setLevel(logging.INFO)
+logger = logging.getLogger("transkrib_bot")
+
+logger.info("=== bot.py module loaded ===")
+
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 _daily_usage_store = []  # list of {date, input_tokens, output_tokens, cost_usd}
 API_URL = os.environ.get("TRANSKRIB_API_URL", "https://transkrib-api.onrender.com")
@@ -36,6 +52,7 @@ LANG_MESSAGES = {
 
 
 async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_language", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     msg = LANG_MESSAGES.get(query.data, "Send a video link!")
@@ -46,6 +63,7 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("handler=%s user=%s chat=%s data=%r", "start", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     keyboard = [[
         InlineKeyboardButton("🇷🇺 Русский", callback_data="lang_ru"),
         InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
@@ -68,6 +86,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_url_start", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     url = update.message.text.strip()
     if not url.startswith('http'):
         await update.message.reply_text(
@@ -92,6 +111,7 @@ async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_cut", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     context.user_data['cut'] = query.data
@@ -109,6 +129,7 @@ async def handle_cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_format(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_format", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     context.user_data['fmt'] = query.data
@@ -125,6 +146,7 @@ async def handle_format(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_lang_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_lang_choice", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     context.user_data['lang'] = query.data
@@ -194,6 +216,7 @@ async def _update_progress(context, chat_id, msg_id, stage_key):
 
 async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обрабатывает кнопки изменения длины нарезки."""
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_recut", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     if query.data == "recut_ok":
@@ -213,6 +236,7 @@ async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_stop(update, context):
     """Handle Stop button — cancel the running task."""
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_stop", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     task_id = query.data.replace('stop_', '', 1)
@@ -229,6 +253,7 @@ async def handle_stop(update, context):
 
 async def handle_retry(update, context):
     """Handle retry button — reset conversation and prompt for new URL."""
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_retry", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     # Clear any saved URL
@@ -474,6 +499,7 @@ async def process_video(chat_id, url, context):
 
 
 async def cmd_plan(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "cmd_plan", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     tid = update.effective_user.id
     nl = chr(10)
     text = "💳 *Твой тариф*" + nl + nl + get_status_text(tid)
@@ -490,6 +516,7 @@ async def cmd_plan(update, context):
 
 
 async def handle_buy(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_buy", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     plan = query.data.replace("buy_", "")
@@ -511,6 +538,7 @@ async def handle_buy(update, context):
 
 
 async def handle_currency(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_currency", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     _, currency, plan = query.data.split("_", 2)
@@ -568,6 +596,7 @@ async def handle_currency(update, context):
 
 
 async def handle_show_plan(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_show_plan", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
     await query.answer()
     tid = query.from_user.id
@@ -587,6 +616,7 @@ async def handle_show_plan(update, context):
 
 
 async def cmd_help(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "cmd_help", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     text = (
         "🤖 *Transkrib SmartCut AI* — что умеет бот:\n\n"
         "🔗 *Отправь ссылку* на видео:\n"
@@ -617,12 +647,14 @@ async def cmd_help(update, context):
 
 
 async def cmd_cancel(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "cmd_cancel", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     await update.message.reply_text("❌ Обработка отменена. Отправь новую ссылку.")
     return ConversationHandler.END
 
 
 async def cmd_stats(update, context):
     """Admin stats: usage, costs, users"""
+    logger.info("handler=%s user=%s chat=%s data=%r", "cmd_stats", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     if update.effective_user.id != ADMIN_ID:
         return
     from claude_assistant import supabase
@@ -661,6 +693,7 @@ async def cmd_stats(update, context):
 
 
 async def handle_chat(update, context):
+    logger.info("handler=%s user=%s chat=%s data=%r", "handle_chat", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     user_text = update.message.text
     uid = update.effective_user.id
 
@@ -745,6 +778,16 @@ async def post_init(app):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).post_init(post_init).build()
 
+    async def _global_error_handler(update, context):
+        logger.exception(
+            "Unhandled exception in handler | update=%s | error=%r",
+            getattr(update, "to_dict", lambda: update)() if update else None,
+            context.error,
+        )
+
+    app.add_error_handler(_global_error_handler)
+    logger.info("Global error handler registered")
+
     conv_handler = ConversationHandler(
         per_message=False,
         entry_points=[MessageHandler(filters.Regex(r"https?://"), handle_url_start)],
@@ -778,6 +821,7 @@ def main():
         from datetime import time as _time
         job_queue.run_daily(_daily_cost_summary, time=_time(17, 0, 0))  # 17:00 UTC = 20:00 MSK
     print("Bot started!")
+    logger.info("Starting polling loop...")
     app.run_polling()
 
 
