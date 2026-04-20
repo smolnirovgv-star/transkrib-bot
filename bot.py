@@ -181,6 +181,64 @@ def split_message(text: str, max_len: int = 4000) -> list:
     return parts
 
 
+async def send_long_message(bot, chat_id, text, parse_mode="HTML", max_len=4000):
+    """Шлёт длинный текст несколькими сообщениями, режет по <b>🎬 границам,
+    потом по \\n\\n абзацам, потом hard cut."""
+    import logging as _lg
+    _slm_logger = _lg.getLogger("send_long_message")
+    if len(text) <= max_len:
+        await bot.send_message(chat_id, text, parse_mode=parse_mode)
+        return
+
+    # Разбиваем по крупным заголовкам <b>🎬
+    chunks = []
+    if "<b>🎬" in text:
+        parts = text.split("<b>🎬")
+        chunks = [parts[0]] if parts[0].strip() else []
+        chunks += ["<b>🎬" + p for p in parts[1:]]
+    else:
+        chunks = [text]
+
+    # Собираем сообщения, укладывая чанки друг за другом
+    messages = []
+    current = ""
+    for chunk in chunks:
+        if len(chunk) > max_len:
+            paragraphs = chunk.split("\n\n")
+            for para in paragraphs:
+                if len(para) > max_len:
+                    while len(para) > max_len:
+                        if current:
+                            messages.append(current.strip())
+                            current = ""
+                        messages.append(para[:max_len])
+                        para = para[max_len:]
+                    current = para + "\n\n"
+                else:
+                    if len(current) + len(para) + 2 > max_len:
+                        messages.append(current.strip())
+                        current = para + "\n\n"
+                    else:
+                        current += para + "\n\n"
+        else:
+            if len(current) + len(chunk) > max_len:
+                messages.append(current.strip())
+                current = chunk
+            else:
+                current += chunk
+    if current.strip():
+        messages.append(current.strip())
+
+    total = len(messages)
+    for i, msg in enumerate(messages, 1):
+        prefix = f"<i>📄 Часть {i} из {total}</i>\n\n" if total > 1 else ""
+        try:
+            await bot.send_message(chat_id, prefix + msg, parse_mode=parse_mode)
+        except Exception as e:
+            _slm_logger.error("send_long_message part %d/%d failed: %r", i, total, e)
+            await bot.send_message(chat_id, f"Часть {i}/{total}:\n\n" + msg)
+
+
 async def _send_admin_log(context, text):
     """Send debug log to admin."""
     try:
@@ -391,16 +449,7 @@ async def process_video(chat_id, url, context):
                         )
                     else:
                         result_text = "✅ <b>Готово!</b>\n\n" + text + admin_suffix
-                        try:
-                            for part in split_message(result_text):
-                                await context.bot.send_message(
-                                    chat_id=chat_id, text=part, parse_mode="HTML"
-                                )
-                        except Exception:
-                            for part in split_message("✅ Готово!\n\n" + text):
-                                await context.bot.send_message(
-                                    chat_id=chat_id, text=part
-                                )
+                        await send_long_message(context.bot, chat_id, result_text)
                     # Отправляем видео если есть
                     video_path_api = data.get("output_video_path")
                     if video_path_api and cut_minutes and cut_minutes != "0":
