@@ -423,6 +423,11 @@ async def process_video(chat_id, url, context):
                         except Exception as e_vid:
                             logger.error("Failed to send video: %s", e_vid)
 
+                    # Download failure warning
+                    cut_download_warning = data.get("cut_download_warning")
+                    if cut_download_warning and cut_minutes and cut_minutes != "0":
+                        await context.bot.send_message(chat_id=chat_id, text=cut_download_warning)
+
                     # Chunk warnings
                     chunk_warning = data.get("chunk_warning")
                     if chunk_warning:
