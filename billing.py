@@ -12,6 +12,7 @@ PLANS = {
     "starter": {"videos_limit": 9999, "days": 10,    "price": 9},
     "pro":     {"videos_limit": 9999, "days": 30,   "price": 29},
     "annual":  {"videos_limit": 9999, "days": 365,  "price": 99},
+    "tester":  {"videos_limit": 9999, "days": 365,  "price": 0},
 }
 
 PLAN_PRICES = {
@@ -80,7 +81,7 @@ def get_status_text(tid: int) -> str:
     limit = user["videos_limit"]
     exp = (user.get("plan_expires_at") or "")[:10]
     names = {"free": "🆓 Free", "starter": "⭐ Базовый",
-             "pro": "💼 Pro", "annual": "👑 Annual"}
+             "pro": "💼 Pro", "annual": "👑 Annual", "tester": "🧪 Tester"}
     name = names.get(plan, plan)
     nl = chr(10)
     if plan == "free":

@@ -807,6 +807,50 @@ async def _daily_cost_summary(context):
     )
 
 
+async def cmd_activate(update, context):
+    """Активировать инвайт-код."""
+    if not context.args:
+        await update.message.reply_text(
+            "Использование: /activate TRANSKRIB-TEST-XXXX-YYYY\n"
+            "Получи код у администратора."
+        )
+        return
+    code = context.args[0].strip().upper()
+    user_id = update.effective_user.id
+    from billing import supabase as _supabase
+    result = _supabase.table("invite_codes").select("*").eq("code", code).execute()
+    if not result.data:
+        await update.message.reply_text(f"❌ Код {code} не найден")
+        return
+    row = result.data[0]
+    if row.get("revoked"):
+        await update.message.reply_text(f"❌ Код {code} отозван")
+        return
+    if row.get("used_by"):
+        if row["used_by"] == user_id:
+            await update.message.reply_text("ℹ️ Ты уже активировал этот код")
+        else:
+            await update.message.reply_text(f"❌ Код {code} уже использован")
+        return
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=row["duration_days"])
+    _supabase.table("invite_codes").update({
+        "used_by": user_id, "used_at": now.isoformat(),
+    }).eq("code", code).execute()
+    _supabase.table("bot_users").upsert({
+        "telegram_id": user_id, "plan": row["plan"],
+        "plan_expires_at": expires_at.isoformat(),
+        "videos_limit": 9999,
+    }).execute()
+    await update.message.reply_html(
+        f"✅ <b>Тестовый доступ активирован!</b>\n\n"
+        f"План: <b>{row['plan']}</b> (безлимит как Pro)\n"
+        f"До: <b>{expires_at.strftime('%d.%m.%Y')}</b>\n"
+        f"Срок: {row['duration_days']} дней\n\n"
+        f"Пришли ссылку YouTube."
+    )
+
 async def post_init(app):
     cookies_updated_at = os.environ.get("COOKIES_UPDATED_AT", "").strip()
     if cookies_updated_at:
@@ -822,10 +866,11 @@ async def post_init(app):
         except Exception:
             pass
     await app.bot.set_my_commands([
-        BotCommand("start",  "🚀 Главная — выбор языка"),
-        BotCommand("plan",   "💳 Мой тариф и подписка"),
-        BotCommand("help",   "❓ Помощь и инструкция"),
-        BotCommand("cancel", "❌ Отменить обработку"),
+        BotCommand("start",    "🚀 Главная — выбор языка"),
+        BotCommand("plan",     "💳 Мой тариф и подписка"),
+        BotCommand("help",     "❓ Помощь и инструкция"),
+        BotCommand("cancel",   "❌ Отменить обработку"),
+        BotCommand("activate", "🎟 Активировать инвайт-код"),
     ])
 
 
@@ -857,8 +902,9 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("plan", cmd_plan))
-    app.add_handler(CommandHandler("cancel", cmd_cancel))
-    app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("cancel",   cmd_cancel))
+    app.add_handler(CommandHandler("stats",    cmd_stats))
+    app.add_handler(CommandHandler("activate", cmd_activate))
     app.add_handler(CallbackQueryHandler(handle_buy, pattern="^buy_"))
     app.add_handler(CallbackQueryHandler(handle_currency, pattern="^currency_"))
     app.add_handler(CallbackQueryHandler(handle_recut, pattern="^recut_"))
