@@ -631,11 +631,19 @@ async def handle_currency(update, context):
                 json={"telegram_id": tid, "plan": plan},
                 timeout=60.0,
             )
+            resp.raise_for_status()
         data = resp.json()
         if "error" in data:
             await context.bot.send_message(chat_id=tid, text=f"❌ Ошибка: {data['error']}")
             return
-        payment_url = data["payment_url"]
+        payment_url = data.get("payment_url")
+        if not payment_url:
+            logger.error("No payment_url in response: %s", data)
+            await context.bot.send_message(
+                chat_id=tid,
+                text="Ошибка платежа: сервер не вернул ссылку. Попробуйте позже или напишите в поддержку."
+            )
+            return
         await context.bot.send_message(
             chat_id=tid,
             text=(
@@ -644,6 +652,12 @@ async def handle_currency(update, context):
                 + "После оплаты тариф активируется автоматически."
             ),
             parse_mode="Markdown",
+        )
+    except _httpx.HTTPStatusError as e:
+        logger.error("Payment API error %s: %s", e.response.status_code, e.response.text[:200])
+        await context.bot.send_message(
+            chat_id=tid,
+            text=f"Ошибка платежа: сервер вернул {e.response.status_code}. Попробуйте позже."
         )
     except Exception as e:
         await context.bot.send_message(chat_id=tid, text=f"❌ Ошибка платежа: {str(e)[:200]}")
