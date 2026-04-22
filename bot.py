@@ -2,12 +2,14 @@ import os
 import io
 import json
 import asyncio
+import time
 import httpx
 from dotenv import load_dotenv
 load_dotenv()
 from billing import can_process, increment_usage, get_status_text, PLAN_PRICES, LEMON_LINKS
 from claude_assistant import ask_claude
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
+from telegram.error import BadRequest
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
 import logging
@@ -38,7 +40,7 @@ WAITING_FORMAT = 2
 WAITING_LANG = 3
 
 CUT_LABELS = {'cut_5': '5 мин', 'cut_10': '10 мин', 'cut_15': '15 мин', 'cut_20': '20 мин', 'cut_30': '30 мин', 'cut_no': 'Без сокращения'}
-FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры', 'fmt_md': 'Markdown (.md)'}
+FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры', 'fmt_md': 'Markdown (.md)', 'fmt_cut_srt': 'Нарезка + SRT'}
 LANG_LABELS = {'lang_auto': '🔄 Авто', 'lang_ru': '🇷🇺 Русский', 'lang_en': '🇬🇧 English'}
 
 LANG_MESSAGES = {
@@ -119,6 +121,7 @@ async def handle_cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton('Только транскрипция', callback_data='fmt_text')],
         [InlineKeyboardButton('Транскрипция + нарезка', callback_data='fmt_cut')],
         [InlineKeyboardButton('SRT субтитры', callback_data='fmt_srt')],
+        [InlineKeyboardButton('Нарезка + SRT', callback_data='fmt_cut_srt')],
         [InlineKeyboardButton('📝 Markdown (.md)', callback_data='fmt_md')],
     ]
     await query.edit_message_text(
@@ -368,11 +371,27 @@ async def process_video(chat_id, url, context):
                 reply_markup=stop_kb,
             )
 
+            timer_msg = await context.bot.send_message(chat_id=chat_id, text="⏱ <b>00:00</b>", parse_mode="HTML")
+            start_time = time.monotonic()
+            last_edit_time = 0.0
+
             last_stage = None
 
             # Шаг 2: polling каждые 10 сек
             for attempt in range(60):
                 await asyncio.sleep(10)
+                now = time.monotonic()
+                if now - last_edit_time >= 5.0:
+                    elapsed = int(now - start_time)
+                    mm, ss = divmod(elapsed, 60)
+                    try:
+                        await timer_msg.edit_text(f"⏱ <b>{mm:02d}:{ss:02d}</b>", parse_mode="HTML")
+                        last_edit_time = now
+                    except BadRequest as e:
+                        if "message is not modified" not in str(e).lower():
+                            logger.warning("[timer] edit failed: %s", e)
+                    except Exception as e:
+                        logger.warning("[timer] unexpected: %s", e)
                 try:
                     status_resp = await client.get(
                         f"{API_URL}/api/tasks/{task_id}/status",
@@ -401,6 +420,12 @@ async def process_video(chat_id, url, context):
                         await context.bot.delete_message(chat_id=chat_id, message_id=stop_msg.message_id)
                     except Exception:
                         pass
+                    total = int(time.monotonic() - start_time)
+                    mm, ss = divmod(total, 60)
+                    try:
+                        await timer_msg.edit_text(f"🔇 <b>Без речи ({mm:02d}:{ss:02d})</b>", parse_mode="HTML")
+                    except Exception as e:
+                        logger.warning("[timer] no_speech edit failed: %s", e)
                     ns_text = data.get("transcription", "❌ Речь не обнаружена в видео.")
                     await context.bot.send_message(chat_id=chat_id, text=ns_text, parse_mode="HTML")
                     return
@@ -413,6 +438,12 @@ async def process_video(chat_id, url, context):
                         await context.bot.delete_message(chat_id=chat_id, message_id=stop_msg.message_id)
                     except Exception:
                         pass
+                    total = int(time.monotonic() - start_time)
+                    mm, ss = divmod(total, 60)
+                    try:
+                        await timer_msg.edit_text(f"✅ <b>Обработано за {mm:02d}:{ss:02d}</b>", parse_mode="HTML")
+                    except Exception as e:
+                        logger.warning("[timer] final edit failed: %s", e)
                     text = data.get("transcription", data.get("text", "Готово!"))
                     usage = data.get("claude_usage", {})
                     admin_suffix = ""
@@ -445,6 +476,16 @@ async def process_video(chat_id, url, context):
                             chat_id=chat_id,
                             document=srt_file,
                             caption="✅ SRT субтитры готовы! Импортируй в видеоредактор.",
+                            filename="subtitles.srt",
+                        )
+                    elif fmt == "fmt_cut_srt":
+                        srt_bytes = text.encode("utf-8")
+                        srt_file = io.BytesIO(srt_bytes)
+                        srt_file.name = "subtitles.srt"
+                        await context.bot.send_document(
+                            chat_id=chat_id,
+                            document=srt_file,
+                            caption="📄 Субтитры SRT для видео",
                             filename="subtitles.srt",
                         )
                     else:
@@ -520,9 +561,21 @@ async def process_video(chat_id, url, context):
                         await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
                     except Exception:
                         pass
+                    total = int(time.monotonic() - start_time)
+                    mm, ss = divmod(total, 60)
+                    try:
+                        await timer_msg.edit_text(f"⚠️ <b>Остановлено на {mm:02d}:{ss:02d}</b>", parse_mode="HTML")
+                    except Exception as e:
+                        logger.warning("[timer] cancelled edit failed: %s", e)
                     return
                 elif status == "error":
                     await _update_progress(context, chat_id, msg_id, 'error')
+                    total = int(time.monotonic() - start_time)
+                    mm, ss = divmod(total, 60)
+                    try:
+                        await timer_msg.edit_text(f"⚠️ <b>Остановлено на {mm:02d}:{ss:02d}</b>", parse_mode="HTML")
+                    except Exception as e:
+                        logger.warning("[timer] error edit failed: %s", e)
                     error = data.get("error", "Неизвестная ошибка")
                     # Detect YouTube-specific errors
                     yt_keywords = ["youtube", "sign in", "bot", "cookie", "yt-dlp", "403"]
@@ -546,6 +599,12 @@ async def process_video(chat_id, url, context):
                     return
 
             await _update_progress(context, chat_id, msg_id, 'error')
+            total = int(time.monotonic() - start_time)
+            mm, ss = divmod(total, 60)
+            try:
+                await timer_msg.edit_text(f"⚠️ <b>Остановлено на {mm:02d}:{ss:02d}</b>", parse_mode="HTML")
+            except Exception as e:
+                logger.warning("[timer] timeout edit failed: %s", e)
             await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (10 мин). Попробуй более короткое видео.")
 
     except Exception as e:
