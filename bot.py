@@ -276,23 +276,84 @@ async def _update_progress(context, chat_id, msg_id, stage_key):
 
 
 async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обрабатывает кнопки изменения длины нарезки."""
+    """Обрабатывает кнопки изменения длины нарезки (реальный resize через API)."""
     logger.info("handler=%s user=%s chat=%s data=%r", "handle_recut", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     query = update.callback_query
-    await query.answer()
+    await query.answer("♻️ Пересчитываю нарезку...")
+
     if query.data == "recut_ok":
         await query.edit_message_reply_markup(reply_markup=None)
         return
-    minutes = query.data.replace("recut_", "")
+
+    # Parse: recut_{task_id}_{minutes} (new) or recut_{minutes} (legacy, no task_id)
+    parts = query.data[len("recut_"):].split("_", 1)
+    if len(parts) < 2:
+        # Legacy format without task_id — ask to re-send
+        await query.edit_message_reply_markup(reply_markup=None)
+        minutes_legacy = parts[0]
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=(
+                f"🔄 Хорошо! Для нарезки на <b>{minutes_legacy} мин</b> отправьте ссылку заново "
+                f"и выберите <b>{minutes_legacy} мин</b> в меню выбора длительности."
+            ),
+            parse_mode="HTML"
+        )
+        return
+
+    task_id, target_min_str = parts[0], parts[1]
     await query.edit_message_reply_markup(reply_markup=None)
-    await context.bot.send_message(
+
+    status_msg = await context.bot.send_message(
         chat_id=query.message.chat_id,
-        text=(
-            f"🔄 Хорошо! Для нарезки на <b>{minutes} мин</b> отправьте ссылку заново "
-            f"и выберите <b>{minutes} мин</b> в меню выбора длительности."
-        ),
+        text=f"♻️ Пересчитываю нарезку на <b>{target_min_str} мин</b>...",
         parse_mode="HTML"
     )
+
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(
+                f"{API_URL}/api/tasks/{task_id}/resize",
+                params={"target_minutes": float(target_min_str)},
+            )
+
+            if resp.status_code == 404:
+                await status_msg.edit_text(
+                    "⏱ Видео уже удалено из временного хранилища.
+"
+                    "Отправь ссылку ещё раз — пересчитаем."
+                )
+                return
+
+            if resp.status_code != 200:
+                await status_msg.edit_text("❌ Ошибка пересчёта. Попробуй ещё раз.")
+                return
+
+            result = resp.json()
+            size_mb = result.get("size_mb", 0)
+
+            # Download resized video and send to user
+            video_resp = await client.get(f"{API_URL}/api/tasks/{task_id}/resized_video")
+            if video_resp.status_code == 200:
+                import io as _io
+                video_bytes = _io.BytesIO(video_resp.content)
+                video_bytes.name = f"resized_{task_id[:8]}.mp4"
+                await status_msg.delete()
+                await context.bot.send_video(
+                    chat_id=query.message.chat_id,
+                    video=video_bytes,
+                    caption=f"🎬 Нарезка: {target_min_str} мин ({size_mb} MB)",
+                    supports_streaming=True,
+                )
+            else:
+                await status_msg.edit_text("❌ Видео готово, но не удалось скачать. Попробуй ещё раз.")
+
+    except Exception as e:
+        logger.exception("[resize] failed")
+        try:
+            await status_msg.edit_text(f"❌ Ошибка: {str(e)[:100]}")
+        except Exception:
+            pass
 
 
 async def handle_stop(update, context):
@@ -527,7 +588,7 @@ async def process_video(chat_id, url, context):
                         suggestion = chunk_warning.get("suggestion_minutes", 0)
                         if warn_type == "loss":
                             warn_kb = InlineKeyboardMarkup([[
-                                InlineKeyboardButton(f"📈 Увеличить до {suggestion} мин", callback_data=f"recut_{suggestion}"),
+                                InlineKeyboardButton(f"📈 Увеличить до {suggestion} мин", callback_data=f"recut_{task_id}_{suggestion}"),
                                 InlineKeyboardButton("✅ Оставить так", callback_data="recut_ok"),
                             ]])
                             await context.bot.send_message(
@@ -542,7 +603,7 @@ async def process_video(chat_id, url, context):
                             )
                         elif warn_type == "surplus":
                             warn_kb = InlineKeyboardMarkup([[
-                                InlineKeyboardButton(f"📉 Сократить до {suggestion} мин", callback_data=f"recut_{suggestion}"),
+                                InlineKeyboardButton(f"📉 Сократить до {suggestion} мин", callback_data=f"recut_{task_id}_{suggestion}"),
                                 InlineKeyboardButton("✅ Оставить так", callback_data="recut_ok"),
                             ]])
                             await context.bot.send_message(
