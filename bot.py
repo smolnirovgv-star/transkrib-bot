@@ -319,8 +319,7 @@ async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if resp.status_code == 404:
                 await status_msg.edit_text(
-                    "⏱ Видео уже удалено из временного хранилища.
-"
+                    "⏱ Видео уже удалено из временного хранилища (>30 мин).\n"
                     "Отправь ссылку ещё раз — пересчитаем."
                 )
                 return
