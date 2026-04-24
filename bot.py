@@ -578,6 +578,11 @@ async def process_video(chat_id, url, context):
                     if cut_download_warning and cut_minutes and cut_minutes != "0":
                         await context.bot.send_message(chat_id=chat_id, text=cut_download_warning)
 
+                    # Cut pipeline failure notification
+                    cut_error = data.get("cut_error")
+                    if cut_error and cut_minutes and cut_minutes != "0" and not video_path_api:
+                        await context.bot.send_message(chat_id=chat_id, text=cut_error)
+
                     # Chunk warnings
                     chunk_warning = data.get("chunk_warning")
                     if chunk_warning:
