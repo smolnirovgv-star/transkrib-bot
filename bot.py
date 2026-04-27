@@ -43,6 +43,26 @@ CUT_LABELS = {'cut_5': '5 мин', 'cut_10': '10 мин', 'cut_15': '15 мин',
 FMT_LABELS = {'fmt_text': 'Только транскрипция', 'fmt_cut': 'Транскрипция + нарезка', 'fmt_srt': 'SRT субтитры', 'fmt_md': 'Markdown (.md)', 'fmt_cut_srt': 'Нарезка + SRT'}
 LANG_LABELS = {'lang_auto': '🔄 Авто', 'lang_ru': '🇷🇺 Русский', 'lang_en': '🇬🇧 English'}
 
+MAX_VIDEO_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB Telegram Bot API limit
+
+VIDEO_FALLBACK_MESSAGE = (
+    "❌ Файл больше 20 МБ — Telegram не даёт мне скачать его напрямую.\n\n"
+    "<b>Что можно сделать:</b>\n\n"
+    "1️⃣ <b>YouTube как Unlisted</b> (быстрее всего):\n"
+    "   • YouTube → Создать → Загрузить видео\n"
+    "   • Видимость: <i>Доступ по ссылке</i>\n"
+    "   • Скопируй ссылку и пришли мне\n\n"
+    "2️⃣ <b>Google Drive</b>:\n"
+    "   • Загрузи файл, ПКМ → Открыть доступ → <i>Все, у кого есть ссылка</i>\n"
+    "   • Скопируй ссылку и пришли мне\n\n"
+    "3️⃣ <b>Dropbox</b>:\n"
+    "   • Загрузи, нажми <i>Поделиться</i> → <i>Создать ссылку</i>\n"
+    "   • В конце ссылки замени <code>?dl=0</code> на <code>?dl=1</code>\n"
+    "   • Пришли мне\n\n"
+    "💡 <b>Совет:</b> попробуй отправить через 🎥 «Видео» в скрепке (а не 📎 «Файл») — "
+    "Telegram автоматически сожмёт и впишется в лимит."
+)
+
 LANG_MESSAGES = {
     'lang_ru': '🇷🇺 Язык установлен: Русский\n\nОтправь ссылку на видео YouTube, VK или Rutube!',
     'lang_en': '🇬🇧 Language set: English\n\nSend a YouTube, VK or Rutube link!',
@@ -80,7 +100,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Привет! Я Transkrib SmartCut AI Bot.\n\n"
         "✂️ Отправь мне ссылку на видео YouTube, VK или Rutube — "
-        "я транскрибирую его и сделаю умную нарезку ключевых моментов!\n\n"
+        "или просто пришли видео-файл с телефона (до 20 МБ)!\n"
+        "Я транскрибирую его и сделаю умную нарезку ключевых моментов!\n\n"
         "🌐 transkrib.su · ✉️ info@transkrib.su\n\n"
         "🌍 Choose your language:",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -110,6 +131,107 @@ async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return WAITING_CUT
+
+
+async def handle_video_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Entry point for video file uploads from any device (Apple/Android/cameras)."""
+    logger.info(
+        "handler=%s user=%s chat=%s",
+        "handle_video_start",
+        update.effective_user.id if update and update.effective_user else None,
+        update.effective_chat.id if update and update.effective_chat else None,
+    )
+    msg = update.message
+    video = msg.video
+    doc = msg.document
+
+    if video:
+        file_id = video.file_id
+        file_size = video.file_size or 0
+        duration = video.duration or 0
+        source_label = "video"
+    elif doc and doc.mime_type and doc.mime_type.startswith("video/"):
+        file_id = doc.file_id
+        file_size = doc.file_size or 0
+        duration = 0  # для document длительность не всегда есть
+        source_label = "document"
+    else:
+        await msg.reply_text(
+            "❌ Это не похоже на видео-файл. Пришли видео или ссылку на YouTube/VK/Rutube."
+        )
+        return ConversationHandler.END
+
+    # Проверка лимита Telegram Bot API
+    if file_size > MAX_VIDEO_SIZE_BYTES:
+        size_mb = file_size / (1024 * 1024)
+        await msg.reply_text(
+            f"📏 Размер файла: <b>{size_mb:.1f} МБ</b>\n\n" + VIDEO_FALLBACK_MESSAGE,
+            parse_mode="HTML",
+        )
+        return ConversationHandler.END
+
+    # Получаем CDN URL Telegram
+    try:
+        tg_file = await context.bot.get_file(file_id)
+        file_url = tg_file.file_path  # PTB v21 возвращает уже полный URL
+        if not file_url.startswith("http"):
+            file_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_url}"
+    except Exception as e:
+        logger.exception("Failed to get_file for %s: %s", file_id, e)
+        await msg.reply_text(
+            "❌ Не удалось получить файл от Telegram. Попробуй ещё раз "
+            "или пришли ссылку на YouTube."
+        )
+        return ConversationHandler.END
+
+    # Кладём URL в ту же ячейку, что и для YouTube — pipeline переиспользуем
+    context.user_data['url'] = file_url
+    context.user_data['source'] = source_label
+    context.user_data['uploaded_duration'] = duration
+
+    # Preview
+    if duration > 0:
+        mins = duration // 60
+        secs = duration % 60
+        duration_str = f"{mins}:{secs:02d}"
+    else:
+        duration_str = "—"
+    size_mb = file_size / (1024 * 1024)
+    preview_text = (
+        f"✅ Видео получено\n\n"
+        f"📏 Длительность: <b>{duration_str}</b>\n"
+        f"💾 Размер: <b>{size_mb:.1f} МБ</b>\n\n"
+        f"Что делаем?"
+    )
+
+    keyboard = _build_adaptive_cut_keyboard(duration)
+    await msg.reply_text(
+        preview_text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return WAITING_CUT
+
+
+def _build_adaptive_cut_keyboard(duration_sec: int):
+    """Адаптивное меню длительности нарезки.
+    Если видео слишком короткое для какого-то значения — кнопка не показывается.
+    duration_sec=0 (неизвестно) → показываем все.
+    """
+    cuts = []
+    thresholds = [(5, '5 мин', 'cut_5'), (10, '10 мин', 'cut_10'),
+                  (15, '15 мин', 'cut_15'), (20, '20 мин', 'cut_20'),
+                  (30, '30 мин', 'cut_30')]
+    for mins, label, cb in thresholds:
+        if duration_sec == 0 or duration_sec >= mins * 60 + 30:
+            cuts.append((label, cb))
+    cuts.append(('Без сокращения', 'cut_no'))
+
+    keyboard = []
+    for i in range(0, len(cuts), 3):
+        row = [InlineKeyboardButton(label, callback_data=cb) for label, cb in cuts[i:i+3]]
+        keyboard.append(row)
+    return keyboard
 
 
 async def handle_cut(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -812,7 +934,8 @@ async def cmd_help(update, context):
     text = (
         "🤖 *Transkrib SmartCut AI* — что умеет бот:\n\n"
         "🔗 *Отправь ссылку* на видео:\n"
-        "YouTube, VK или Rutube\n\n"
+        "YouTube, VK или Rutube\n"
+        "или просто пришли видео-файл с телефона (до 20 МБ)\n\n"
         "⚙️ *Настройки обработки:*\n"
         "- ⏱ Длительность — 1, 3, 5, 10, 15 мин или без сокращения\n"
         "- 📄 Формат — только текст, текст+нарезка, SRT субтитры\n"
@@ -1027,7 +1150,10 @@ def main():
 
     conv_handler = ConversationHandler(
         per_message=False,
-        entry_points=[MessageHandler(filters.Regex(r"https?://"), handle_url_start)],
+        entry_points=[
+            MessageHandler(filters.Regex(r"https?://"), handle_url_start),
+            MessageHandler(filters.VIDEO | filters.Document.VIDEO, handle_video_start),
+        ],
         states={
             WAITING_CUT: [CallbackQueryHandler(handle_cut, pattern="^cut_")],
             WAITING_FORMAT: [CallbackQueryHandler(handle_format, pattern="^fmt_")],
