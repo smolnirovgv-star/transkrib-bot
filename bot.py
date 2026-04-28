@@ -64,12 +64,12 @@ VIDEO_FALLBACK_MESSAGE = (
 )
 
 LANG_MESSAGES = {
-    'lang_ru': '🇷🇺 Язык установлен: Русский\n\nОтправь ссылку на видео YouTube, VK или Rutube!',
-    'lang_en': '🇬🇧 Language set: English\n\nSend a YouTube, VK or Rutube link!',
-    'lang_hi': '🇮🇳 Hindi selected\n\nSend a YouTube, VK or Rutube link!',
-    'lang_zh': '🇨🇳 已选择中文\n\n请发送YouTube、VK或Rutube链接！',
-    'lang_ko': '🇰🇷 한국어 선택됨\n\nYouTube, VK 또는 Rutube 링크를 보내주세요!',
-    'lang_pt': '🇧🇷 Português selecionado\n\nEnvie um link do YouTube, VK ou Rutube!',
+    'lang_ru': '🇷🇺 Язык установлен: Русский\n\nОтправь ссылку на видео YouTube, VK или Rutube — или просто пришли видео-файл с телефона (до 20 МБ)!',
+    'lang_en': '🇬🇧 Language set: English\n\nSend a YouTube, VK or Rutube link — or just upload a video file from your phone (up to 20 MB)!',
+    'lang_hi': '🇮🇳 Hindi selected\n\nSend a YouTube, VK or Rutube link — or just upload a video file from your phone (up to 20 MB)!',
+    'lang_zh': '🇨🇳 已选择中文\n\n请发送YouTube、VK或Rutube链接 — 或直接从手机上传视频文件（最大20 MB）！',
+    'lang_ko': '🇰🇷 한국어 선택됨\n\nYouTube, VK 또는 Rutube 링크를 보내주세요 — 또는 휴대폰에서 동영상 파일을 직접 업로드하세요 (최대 20 MB)!',
+    'lang_pt': '🇧🇷 Português selecionado\n\nEnvie um link do YouTube, VK ou Rutube — ou simplesmente envie um vídeo do celular (até 20 MB)!',
 }
 
 
@@ -102,9 +102,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "✂️ Отправь мне ссылку на видео YouTube, VK или Rutube — "
         "или просто пришли видео-файл с телефона (до 20 МБ)!\n"
         "Я транскрибирую его и сделаю умную нарезку ключевых моментов!\n\n"
+        "📹 <i>Совет: можно снять прямо в чате — жми 📎 → Камера</i>\n\n"
         "🌐 transkrib.su · ✉️ info@transkrib.su\n\n"
         "🌍 Choose your language:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="HTML"
     )
 
 
