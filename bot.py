@@ -64,12 +64,12 @@ VIDEO_FALLBACK_MESSAGE = (
 )
 
 LANG_MESSAGES = {
-    'lang_ru': '🇷🇺 Язык установлен: Русский\n\nОтправь ссылку на видео YouTube, VK или Rutube — или просто пришли видео-файл с телефона (до 20 МБ)!',
-    'lang_en': '🇬🇧 Language set: English\n\nSend a YouTube, VK or Rutube link — or just upload a video file from your phone (up to 20 MB)!',
-    'lang_hi': '🇮🇳 Hindi selected\n\nSend a YouTube, VK or Rutube link — or just upload a video file from your phone (up to 20 MB)!',
-    'lang_zh': '🇨🇳 已选择中文\n\n请发送YouTube、VK或Rutube链接 — 或直接从手机上传视频文件（最大20 MB）！',
-    'lang_ko': '🇰🇷 한국어 선택됨\n\nYouTube, VK 또는 Rutube 링크를 보내주세요 — 또는 휴대폰에서 동영상 파일을 직접 업로드하세요 (최대 20 MB)!',
-    'lang_pt': '🇧🇷 Português selecionado\n\nEnvie um link do YouTube, VK ou Rutube — ou simplesmente envie um vídeo do celular (até 20 MB)!',
+    'lang_ru': '🇷🇺 Язык установлен: Русский\n\nОтправь ссылку на YouTube видео или загрузи файл с телефона (до 20 МБ)!',
+    'lang_en': '🇬🇧 Language set: English\n\nSend a YouTube link or upload a video file from your phone (up to 20 MB)!',
+    'lang_hi': '🇮🇳 Hindi selected\n\nSend a YouTube link or upload a video file from your phone (up to 20 MB)!',
+    'lang_zh': '🇨🇳 已选择中文\n\n请发送YouTube链接或从手机上传视频文件（最大20 MB）！',
+    'lang_ko': '🇰🇷 한국어 선택됨\n\nYouTube 링크를 보내거나 휴대폰에서 동영상 파일을 업로드하세요 (최대 20 MB)!',
+    'lang_pt': '🇧🇷 Português selecionado\n\nEnvie um link do YouTube ou faça upload de um vídeo do celular (até 20 MB)!',
 }
 
 
@@ -98,9 +98,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("💳 Мой тариф", callback_data="show_plan"),
     ]]
     await update.message.reply_text(
-        "👋 Привет! Я Transkrib SmartCut AI Bot.\n\n"
-        "✂️ Отправь мне ссылку на видео YouTube, VK или Rutube — "
-        "или просто пришли видео-файл с телефона (до 20 МБ)!\n"
+        "👋 Привет! Я Transkrib Plus!\n\n"
+        "✂️ Отправь мне ссылку на YouTube видео или загрузи файл с телефона (до 20 МБ)\n"
         "Я транскрибирую его и сделаю умную нарезку ключевых моментов!\n\n"
         "📹 <i>Совет: можно снять прямо в чате — жми 📎 → Камера</i>\n\n"
         "🌐 transkrib.su · ✉️ info@transkrib.su\n\n"
@@ -115,7 +114,7 @@ async def handle_url_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = update.message.text.strip()
     if not url.startswith('http'):
         await update.message.reply_text(
-            '❌ Пожалуйста отправь ссылку на видео.\nПоддерживаются: YouTube, VK, Rutube'
+            '❌ Пожалуйста отправь ссылку на видео.\nПоддерживается: YouTube'
         )
         return ConversationHandler.END
     context.user_data['url'] = url
@@ -159,7 +158,7 @@ async def handle_video_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
         source_label = "document"
     else:
         await msg.reply_text(
-            "❌ Это не похоже на видео-файл. Пришли видео или ссылку на YouTube/VK/Rutube."
+            "❌ Это не похоже на видео-файл. Пришли видео или ссылку на YouTube."
         )
         return ConversationHandler.END
 
@@ -934,9 +933,9 @@ async def handle_show_plan(update, context):
 async def cmd_help(update, context):
     logger.info("handler=%s user=%s chat=%s data=%r", "cmd_help", update.effective_user.id if update and update.effective_user else None, update.effective_chat.id if update and update.effective_chat else None, (update.message.text if update and update.message else None) or (update.callback_query.data if update and update.callback_query else None))
     text = (
-        "🤖 *Transkrib SmartCut AI* — что умеет бот:\n\n"
+        "🤖 *Transkrib Plus* — что умеет бот:\n\n"
         "🔗 *Отправь ссылку* на видео:\n"
-        "YouTube, VK или Rutube\n"
+        "YouTube\n"
         "или просто пришли видео-файл с телефона (до 20 МБ)\n\n"
         "⚙️ *Настройки обработки:*\n"
         "- ⏱ Длительность — 1, 3, 5, 10, 15 мин или без сокращения\n"
