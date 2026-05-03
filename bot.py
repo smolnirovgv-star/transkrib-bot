@@ -688,6 +688,7 @@ async def process_video(chat_id, url, context):
                         await send_long_message(context.bot, chat_id, result_text)
                     # Отправляем видео если есть
                     video_path_api = data.get("output_video_path")
+                    logger.info(f"[VIDEO_SEND] url={url[:50] if url else None} video_path_api={video_path_api} cut_minutes={cut_minutes} is_phone={url and 'api.telegram.org/file/bot' in url if url else False}")
                     is_phone_video = url and "api.telegram.org/file/bot" in url
                     if video_path_api and (is_phone_video or (cut_minutes and cut_minutes != "0")):
                         try:
