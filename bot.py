@@ -9,7 +9,7 @@ load_dotenv()
 from billing import can_process, increment_usage, get_status_text, PLAN_PRICES, LEMON_LINKS
 from claude_assistant import ask_claude
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Conflict
 from telegram.ext import Application, ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ConversationHandler, filters, ContextTypes
 
 import logging
@@ -1204,7 +1204,18 @@ def main():
         job_queue.run_daily(_daily_cost_summary, time=_time(17, 0, 0))  # 17:00 UTC = 20:00 MSK
     print("Bot started!")
     logger.info("Starting polling loop...")
-    app.run_polling()
+    import time as _time_module
+    while True:
+        try:
+            app.run_polling(drop_pending_updates=True)
+            break
+        except Conflict:
+            logger.warning("[BOT] Conflict detected, restarting in 5s...")
+            _time_module.sleep(5)
+            continue
+        except Exception as e:
+            logger.error(f"[BOT] Fatal error: {e}")
+            break
 
 
 if __name__ == "__main__":
