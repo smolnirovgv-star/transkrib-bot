@@ -466,6 +466,9 @@ async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     video=video_bytes,
                     caption=f"🎬 Нарезка: {target_min_str} мин ({size_mb} MB)",
                     supports_streaming=True,
+                    read_timeout=300,
+                    write_timeout=300,
+                    connect_timeout=60,
                 )
             else:
                 await status_msg.edit_text("❌ Видео готово, но не удалось скачать. Попробуй ещё раз.")
@@ -636,7 +639,7 @@ async def process_video(chat_id, url, context):
                         cost = usage.get("cost_usd", 0)
                         admin_suffix = f"\n\n<i>🔧 in:{inp} out:{out} ${cost:.4f}</i>"
                         _daily_usage_store.append({
-                            "date": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%d"),
+                            "date": __import__("datetime").datetime.now(tz=__import__("datetime").timezone.utc).strftime("%Y-%m-%d"),
                             "input_tokens": inp,
                             "output_tokens": out,
                             "cost_usd": cost,
@@ -650,6 +653,9 @@ async def process_video(chat_id, url, context):
                             document=md_file,
                             caption="✅ Транскрипция готова в формате Markdown!",
                             filename="transcript.md",
+                            read_timeout=300,
+                            write_timeout=300,
+                            connect_timeout=60,
                         )
                     elif fmt == "fmt_srt":
                         srt_bytes = text.encode("utf-8")
@@ -660,6 +666,9 @@ async def process_video(chat_id, url, context):
                             document=srt_file,
                             caption="✅ SRT субтитры готовы! Импортируй в видеоредактор.",
                             filename="subtitles.srt",
+                            read_timeout=300,
+                            write_timeout=300,
+                            connect_timeout=60,
                         )
                     elif fmt == "fmt_cut_srt":
                         srt_bytes = text.encode("utf-8")
@@ -670,6 +679,9 @@ async def process_video(chat_id, url, context):
                             document=srt_file,
                             caption="📄 Субтитры SRT для видео",
                             filename="subtitles.srt",
+                            read_timeout=300,
+                            write_timeout=300,
+                            connect_timeout=60,
                         )
                     else:
                         result_text = "✅ <b>Готово!</b>\n\n" + text + admin_suffix
@@ -689,6 +701,9 @@ async def process_video(chat_id, url, context):
                                         video=video_bytes,
                                         caption=f"🎬 Нарезка: {cut_minutes} мин",
                                         supports_streaming=True,
+                                        read_timeout=300,
+                                        write_timeout=300,
+                                        connect_timeout=60,
                                     )
                                     logger.info("Sent video to user %s", chat_id)
                                 else:
