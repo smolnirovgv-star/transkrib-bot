@@ -466,8 +466,8 @@ async def handle_recut(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     video=video_bytes,
                     caption=f"🎬 Нарезка: {target_min_str} мин ({size_mb} MB)",
                     supports_streaming=True,
-                    read_timeout=300,
-                    write_timeout=300,
+                    read_timeout=600,
+                    write_timeout=600,
                     connect_timeout=60,
                 )
             else:
@@ -653,8 +653,8 @@ async def process_video(chat_id, url, context):
                             document=md_file,
                             caption="✅ Транскрипция готова в формате Markdown!",
                             filename="transcript.md",
-                            read_timeout=300,
-                            write_timeout=300,
+                            read_timeout=600,
+                            write_timeout=600,
                             connect_timeout=60,
                         )
                     elif fmt == "fmt_srt":
@@ -666,8 +666,8 @@ async def process_video(chat_id, url, context):
                             document=srt_file,
                             caption="✅ SRT субтитры готовы! Импортируй в видеоредактор.",
                             filename="subtitles.srt",
-                            read_timeout=300,
-                            write_timeout=300,
+                            read_timeout=600,
+                            write_timeout=600,
                             connect_timeout=60,
                         )
                     elif fmt == "fmt_cut_srt":
@@ -679,8 +679,8 @@ async def process_video(chat_id, url, context):
                             document=srt_file,
                             caption="📄 Субтитры SRT для видео",
                             filename="subtitles.srt",
-                            read_timeout=300,
-                            write_timeout=300,
+                            read_timeout=600,
+                            write_timeout=600,
                             connect_timeout=60,
                         )
                     else:
@@ -693,7 +693,7 @@ async def process_video(chat_id, url, context):
                     if video_path_api and (is_phone_video or (cut_minutes and cut_minutes != "0")):
                         try:
                             video_url = f"{API_URL}/api/tasks/{task_id}/video"
-                            async with httpx.AsyncClient(timeout=300.0) as vclient:
+                            async with httpx.AsyncClient(timeout=600.0) as vclient:
                                 video_resp = await vclient.get(video_url)
                                 if video_resp.status_code == 200:
                                     video_bytes = io.BytesIO(video_resp.content)
@@ -703,8 +703,8 @@ async def process_video(chat_id, url, context):
                                         video=video_bytes,
                                         caption=f"🎬 Нарезка: {cut_minutes} мин",
                                         supports_streaming=True,
-                                        read_timeout=300,
-                                        write_timeout=300,
+                                        read_timeout=600,
+                                        write_timeout=600,
                                         connect_timeout=60,
                                     )
                                     logger.info("Sent video to user %s", chat_id)
