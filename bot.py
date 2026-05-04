@@ -693,7 +693,7 @@ async def process_video(chat_id, url, context):
                     if video_path_api and (is_phone_video or (cut_minutes and cut_minutes != "0")):
                         try:
                             video_url = f"{API_URL}/api/tasks/{task_id}/video"
-                            async with httpx.AsyncClient(timeout=120.0) as vclient:
+                            async with httpx.AsyncClient(timeout=300.0) as vclient:
                                 video_resp = await vclient.get(video_url)
                                 if video_resp.status_code == 200:
                                     video_bytes = io.BytesIO(video_resp.content)
@@ -710,8 +710,16 @@ async def process_video(chat_id, url, context):
                                     logger.info("Sent video to user %s", chat_id)
                                 else:
                                     logger.warning("Video not available: %d", video_resp.status_code)
+                                    await context.bot.send_message(
+                                        chat_id=chat_id,
+                                        text="⚠️ Видео обработано, но не удалось скачать файл. Попробуй нажать 🔄 Повторить.",
+                                    )
                         except Exception as e_vid:
                             logger.error("Failed to send video: %s", e_vid)
+                            await context.bot.send_message(
+                                chat_id=chat_id,
+                                text=f"⚠️ Ошибка отправки видео: {str(e_vid)[:100]}. Попробуй нажать 🔄 Повторить.",
+                            )
 
                     # Download failure warning
                     cut_download_warning = data.get("cut_download_warning")
