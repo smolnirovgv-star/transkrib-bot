@@ -517,6 +517,66 @@ async def process_video(chat_id, url, context):
     fmt = context.user_data.get('fmt', 'fmt_text')
     language = context.user_data.get('lang', 'lang_auto').replace('lang_', '')
 
+    # ===== PRE-FLIGHT: проверка длительности =====
+    duration_seconds = 0
+    video_title = ""
+    try:
+        async with httpx.AsyncClient(timeout=35) as _pf_client:
+            _pf_r = await _pf_client.get(f"{API_URL}/api/video-info", params={"url": url})
+            _pf_data = _pf_r.json()
+            if _pf_data.get("ok"):
+                duration_seconds = int(_pf_data.get("duration_seconds") or 0)
+                video_title = _pf_data.get("title", "")
+    except Exception as _pf_e:
+        logger.warning("[preflight] video-info failed: %s", _pf_e)
+
+    duration_minutes = duration_seconds // 60
+    if duration_seconds > 0:
+        max_wait_seconds = max(900, min(int(duration_seconds * 1.5), 6 * 3600))
+    else:
+        max_wait_seconds = 1800
+
+    LONG_VIDEO_HARD_LIMIT_MIN = 240
+    LONG_VIDEO_WARN_MIN = 180
+
+    if duration_minutes > LONG_VIDEO_HARD_LIMIT_MIN:
+        hours = duration_minutes // 60
+        mins = duration_minutes % 60
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"📹 Видео: <b>{hours}ч {mins:02d}м</b>\n\n"
+                f"⛔ <b>Превышен лимит 4 часа</b>\n\n"
+                f"Сейчас бот обрабатывает видео максимум до 4 часов за один раз. "
+                f"Для длинных видео разбейте материал на части и пришлите по очереди:\n"
+                f"• Часть 1: первые 2 часа\n"
+                f"• Часть 2: вторые 2 часа\n\n"
+                f"💡 <i>В будущем добавим автоматическое разбиение.</i>"
+            ),
+            parse_mode="HTML"
+        )
+        return
+
+    if duration_minutes > LONG_VIDEO_WARN_MIN:
+        hours = duration_minutes // 60
+        mins = duration_minutes % 60
+        est_min = max_wait_seconds // 60
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"📹 Видео: <b>{hours}ч {mins:02d}м</b>\n"
+                f"⏳ Длинное видео — обработка может занять до <b>{est_min} мин</b>.\n"
+                f"⚠️ Не закрывай чат до завершения."
+            ),
+            parse_mode="HTML"
+        )
+    elif duration_minutes >= 30:
+        est_min = max_wait_seconds // 60
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"📹 Длительность: {duration_minutes} мин · ⏳ ~{est_min} мин обработки"
+        )
+
     try:
         # Send initial progress message (will be edited in-place)
         progress_msg = await context.bot.send_message(
@@ -563,8 +623,10 @@ async def process_video(chat_id, url, context):
 
             last_stage = None
 
-            # Шаг 2: polling каждые 10 сек
-            for attempt in range(60):
+            # Шаг 2: polling каждые 10 сек, до достижения max_wait_seconds
+            max_wait_seconds = locals().get('max_wait_seconds', 600)
+            max_attempts = max(60, max_wait_seconds // 10)
+            for attempt in range(max_attempts):
                 await asyncio.sleep(10)
                 now = time.monotonic()
                 if now - last_edit_time >= 5.0:
@@ -818,7 +880,10 @@ async def process_video(chat_id, url, context):
                 await timer_msg.edit_text(f"⚠️ <b>Остановлено на {mm:02d}:{ss:02d}</b>", parse_mode="HTML")
             except Exception as e:
                 logger.warning("[timer] timeout edit failed: %s", e)
-            await context.bot.send_message(chat_id=chat_id, text="⏱ Превышено время ожидания (10 мин). Попробуй более короткое видео.")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"⏱ Превышено время ожидания ({max_attempts * 10 // 60} мин). Видео слишком длинное или произошла ошибка обработки. Попробуй ещё раз или свяжись с поддержкой.",
+            )
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Ошибка: {str(e)[:200]}")
