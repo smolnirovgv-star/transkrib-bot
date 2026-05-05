@@ -520,15 +520,39 @@ async def process_video(chat_id, url, context):
     # ===== PRE-FLIGHT: проверка длительности =====
     duration_seconds = 0
     video_title = ""
+    preflight_error = None
     try:
-        async with httpx.AsyncClient(timeout=35) as _pf_client:
+        async with httpx.AsyncClient(timeout=70) as _pf_client:
             _pf_r = await _pf_client.get(f"{API_URL}/api/video-info", params={"url": url})
             _pf_data = _pf_r.json()
             if _pf_data.get("ok"):
                 duration_seconds = int(_pf_data.get("duration_seconds") or 0)
                 video_title = _pf_data.get("title", "")
+            else:
+                preflight_error = _pf_data.get("error", "unknown")
     except Exception as _pf_e:
+        preflight_error = str(_pf_e)[:200]
         logger.warning("[preflight] video-info failed: %s", _pf_e)
+
+    # Если pre-flight не дал валидной duration — отказываемся (иначе uniform_fallback даст мусор)
+    if duration_seconds <= 0 and url and "api.telegram.org/file/bot" not in url:
+        logger.warning("[preflight] no duration for url=%s error=%s", url, preflight_error)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                "<b>Не удалось определить длительность видео</b>\n\n"
+                "Возможные причины:\n"
+                "- YouTube временно блокирует запросы\n"
+                "- Видео приватное, удалено или возрастные ограничения\n"
+                "- Региональные ограничения\n\n"
+                "Попробуй:\n"
+                "- Прислать ссылку ещё раз через 5-10 минут\n"
+                "- Прислать другое видео\n"
+                "- Загрузить видеофайл с устройства (до 20 МБ)"
+            ),
+            parse_mode="HTML",
+        )
+        return
 
     duration_minutes = duration_seconds // 60
     if duration_seconds > 0:
